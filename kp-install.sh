@@ -233,18 +233,91 @@ config_dockerd() {
   fi
 }
 
+# 打通商店"打开"按钮：给 appcenter.lua 追加一个 Lua 覆盖函数。
+# 原理：LuCI 控制器里后定义的同名函数会覆盖先定义的；覆盖版从
+# /etc/kp_store/routes.list 读本地路由，补进商店列表数据。
+# 注意：改控制器后必须清 /tmp/luci-modulecache（LuCI 字节码缓存）
+# 并重启 uhttpd，否则改动不生效 —— 实测踩过。
+patch_store_open() {
+  local lua=/usr/lib/lua/luci/controller/nradio_adv/appcenter.lua
+  [ -f "$lua" ] || return 0
+  if grep -q kp_local_route "$lua"; then return 0; fi
+
+  [ -f "$lua.kp-bak" ] || cp "$lua" "$lua.kp-bak"
+  cat >> "$lua" <<'LUAEOF'
+
+-- kp_local_route: 让"本地注册"的应用也能被打开。
+-- 守护进程只给远程目录里的应用下发 luci_module_route，而且会把
+-- /etc/config/appcenter 里它不认识的 option 重写掉（实测丢弃）。
+-- 所以本地路由放在守护进程碰不到的 /etc/kp_store/routes.list
+-- （每行 `应用名|路由`），这里后定义覆盖原函数注入列表数据。
+function action_app_list_data()
+	local util = require "luci.util"
+	local lng = require "luci.i18n"
+	local applist = util.ubus("appcenter", "list") or {parameter={applist={}}}
+	if applist and applist.parameter and applist.parameter.applist then
+		local kp_r = {}
+		local f = io.open("/etc/kp_store/routes.list", "r")
+		if f then
+			for l in f:lines() do
+				local n, rt = l:match("^(.-)|(.*)$")
+				if n and rt and #rt > 0 then kp_r[n] = rt end
+			end
+			f:close()
+		end
+		for _,v in ipairs(applist.parameter.applist) do
+			if v.name and #v.name > 0 then
+				v.name_lng = lng.translate("AppcenterKey_"..v.name)
+				if v.name_lng:match("^AppcenterKey_") then v.name_lng = "" end
+			end
+			if v.des and #v.des > 0 then
+				v.description_lng = lng.translate("AppcenterDes_"..v.name)
+				if v.description_lng:match("^AppcenterDes_") then v.description_lng = "" end
+			end
+			if (not v.luci_module_route or #v.luci_module_route == 0) and kp_r[v.name] then
+				v.luci_module_route = kp_r[v.name]
+			end
+		end
+	end
+	return applist.parameter
+end
+LUAEOF
+  # 语法不对就回滚，绝不让商店页面打不开
+  if ! lua -e "assert(loadfile('$lua'))" >/dev/null 2>&1; then
+    cp "$lua.kp-bak" "$lua"
+    ui_warn "Lua 补丁语法异常，已回滚（商店'打开'按钮维持原状）"
+    return 0
+  fi
+  rm -rf /tmp/luci-modulecache /tmp/luci-indexcache
+  /etc/init.d/uhttpd restart >/dev/null 2>&1 || :
+  ui_ok "已打通商店'打开'按钮（本地应用路由注入）"
+}
+
 # 注册应用到鲲鹏商店（原生面板 → 应用中心）。
 # 真实机制（真机逆向确认）：
 #   · 商店目录 = /etc/config/appcenter（UCI），守护进程 /usr/sbin/appcenter 提供 ubus 接口
 #   · 「已安装」状态由守护进程对 package_list 里每个包名跑 `opkg info` 实时判定，
 #     所以只要包真的装了，状态就一定是准的 —— 不造假、无需手动维护
 #   · 「卸载」按钮会真跑 `opkg remove`，行为一致
-# 用法：register_store <显示名> <图标名> <描述> <子包1> [子包2 ...]
+#   · 「打开」按钮 = iframe 加载 luci_module_route；守护进程只给远程目录里的
+#     应用发这个字段（UCI 里手写会被它重写丢弃），所以本地路由放在它碰不到的
+#     /etc/kp_store/routes.list，由 patch_store_open() 注入的 Lua 覆盖函数读取
+# 用法：register_store <显示名> <图标名> <描述> <打开路由> <子包1> [子包2 ...]
 # 幂等：先把同名旧条目删干净再重写，版本/体积每次取实时值。
 register_store() {
-  local app="$1" icon="$2" des="$3" && shift 3
+  local app="$1" icon="$2" des="$3" route="$4" && shift 4
   have uci || return 0
   [ -x /usr/sbin/appcenter ] || { ui_warn "应用商店组件不存在，跳过 $app 注册"; return 0; }
+
+  # 路由表：一行一个 `应用名|路由`，守护进程不会碰这个文件
+  if [ -n "$route" ]; then
+    mkdir -p /etc/kp_store
+    touch /etc/kp_store/routes.list
+    grep -v "^${app}|" /etc/kp_store/routes.list > /etc/kp_store/routes.list.tmp || :
+    mv /etc/kp_store/routes.list.tmp /etc/kp_store/routes.list
+    echo "$app|$route" >> /etc/kp_store/routes.list
+    patch_store_open
+  fi
 
   # 图标：优先用应用自带 logo（调用方先拷进商店图标目录），缺失则回退默认图标
   local icon_dir=/www/luci-static/nradio/images/icon
@@ -511,6 +584,7 @@ EOF
         /www/luci-static/nradio/images/icon/openclash.png 2>/dev/null || :
   register_store OpenClash openclash.png \
     "Clash Meta 内核的代理客户端，支持订阅管理与规则分流" \
+    "admin/services/openclash" \
     luci-app-openclash pkg-openclash-dep
 
   ui_stage_end
