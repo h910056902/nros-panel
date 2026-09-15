@@ -71,10 +71,10 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 
 | 文件 | 作用 |
 |---|---|
-| `install.sh` | **入口**。引导器 + 流程编排，判断存储状态、决定是否重启续跑 |
+| `install.sh` | **入口**。引导器 + 流程编排：判断存储状态、迁移 overlay 内容、预置续跑钩子、决定是否重启 |
 | `kp-ui.sh` | **终端界面库**。所有输出格式都在这里，改界面只改它 |
 | `kp-install.sh` | **主脚本**。四阶段：预检换源 → OpenClash → Docker → 1Panel |
-| `kp-storage-init.sh` | **存储初始化**。TF 卡分区 + f2fs 格式化 + 写 fstab |
+| `kp-storage-init.sh` | **存储初始化**。TF 卡双分区 + f2fs（官方卷标）+ 写 fstab |
 | `kp-ui-preview.sh` | **界面预览**。本地跑一遍所有 UI 元素，不用上设备（开发用） |
 
 改界面、改参数、改流程逻辑，各改各的文件，互不影响。
@@ -129,22 +129,67 @@ src/gz openwrt_routing  https://mirrors.aliyun.com/openwrt/releases/21.02.7/pack
 所以 `dockerd` / `docker` / OpenClash ipk 一律加 `--force-depends`，
 否则 opkg 会以「依赖不满足」直接拒装。
 
-### 3. 重启会换掉整个 overlay，续跑钩子必须预置到新卡里
+### 3. 重启会换掉整个 overlay：既要搬内容，也要预置续跑钩子
 
 分区完成后 `/overlay` 会从 NOR 的 2MB 分区换成卡上的 p1。
-**当前系统里写的任何文件都会随旧 overlay 一起消失。**
+**当前系统里写的任何文件都会随旧 overlay 一起消失**，而新分区是空的。
+这会连带两个后果，都必须处理：
 
-`install.sh` 的做法：往新卡 p1 的文件系统里直接预置 overlay 的 upper 层：
+**① 身份与网络配置会回落到 `/rom` 出厂值。**
+`/rom/etc/shadow` 里 root 是**空密码**（`root::0:0:99999:7:::`），而 dropbear
+不允许空密码登录 —— **重启后 SSH 会直接登不上**，LAN IP、防火墙规则也一起回退。
+
+**② 续跑钩子没地方放。**
+当前系统里写的任何文件都会随旧 overlay 消失，钩子必须直接落在新卡上。
+
+`install.sh` 的 `arm_auto()` 一次解决两件事，做法和厂商官方完全一致
+（见下一节）：
 
 ```
 <新卡 p1>/
-├── upper/etc/rc.local   ← 续跑代码写在这（overlayfs 上层优先于 /rom）
-└── work/
+├── upper/            ← 当前 overlay 的 upper 整个 cp -a 过来（含 /etc/config、
+│                        密码、dropbear 主机密钥、crontabs、以及 83 个 whiteout）
+├── upper/etc/rc.local ← 再覆盖成带续跑代码的版本
+└── work/             ← 一并搬过来
 ```
 
 开机时由 `/rom` 自带的 `/etc/init.d/done`（`S95done`）执行 `/etc/rc.local`，
 把 `install.sh` 再拉下来跑一遍 —— 此时存储已就绪，直接进入安装。
 跑完自删，不会重复执行。
+
+> 为什么敢直接 `cp -a`：`/overlay/upper/etc/uci-defaults/` 下那 83 个条目是
+> **whiteout 字符设备（0,0）**，作用是屏蔽 `/rom` 里的一次性初始化脚本。
+> 已实测 busybox `cp -a` 能完整保留字符设备，所以新 overlay 的行为与当前
+> 完全一致，那批脚本不会重跑。漏掉它们的话，`10_migrate-shadow` 这类脚本
+> 会重新执行，有动 root 密码的风险。
+
+---
+
+## 与厂商官方方案对齐（读固件源码得来）
+
+固件自带了官方实现，位置在 `/usr/lib/lua/luci/controller/nradio_adv/sd.lua`
+（LuCI → 系统 → SD 卡 页面）。改本套件前建议先读它，几个关键点：
+
+| 环节 | 官方做法 | 本套件的做法 |
+|---|---|---|
+| 分区 | `o` `n` `p` `1` → **单分区占满全盘** | 多切一个 p2 给 Docker（官方也认这个形态，见下） |
+| 格式化 | `mkfs.f2fs -l nradio_tf_overlay` | 卷标照抄官方值 |
+| 第二分区卷标 | `blkid --label nradio_user_data` 是它认可的名字 | p2 就用 `nradio_user_data` |
+| 启用 | fstab 里 `target=/overlay` `device=/dev/mmcblk0p1` `ignore_uuid=1` + `enabled=1`（`action_set_overlay`） | 完全一致 |
+| 内容迁移 | `cp -a /overlay/upper` + `/overlay/work`（`make_sysupgrade_backup`, `cover=0`） | 完全一致 |
+| 可用判据 | 卡上存在 `upper/etc/config` | 迁移后校验这一条，不过就中止 |
+
+另外两个容易忽略的机制：
+
+- **热插拔** `/etc/hotplug.d/block/00-mount`：按卷标把分区挂到 `/tmp/storage/`，
+  并给 `mmcblk*` 建 `/tmp/istorage` 软链。它只在 `ID_FS_PARTLABEL` 等于
+  `nradio_user_data` 时才改挂到 `/mnt/storage/data`（GPT 分区标签，MBR 下为空），
+  所以用 MBR 不会和我们的 fstab 抢挂载点。
+- **`/overlay` 所在设备被拔出时会自动重启**（同一脚本的 `remove` 分支）——
+  这是厂商的保护行为，属正常现象。
+- u-boot 环境变量 `boot_from_sd` 是**另一条完全不同的路径**（把系统镜像整盘 dd
+  到卡上用 u-boot 直启，见 `action_creat_sysdisk`），与本套件的 overlay 方案无关，
+  不要去动它。
 
 ---
 

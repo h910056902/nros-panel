@@ -12,6 +12,12 @@
 #  为什么要分两块：Docker 的 overlay2 存储驱动不能建在 overlayfs 之上，
 #  必须有一块「独立挂载的裸文件系统」。p2 就是给它的，所以要单独分区。
 #
+#  与厂商官方方案的关系：固件自带的 LuCI → 系统 → SD 卡 页面
+#  (/usr/lib/lua/luci/controller/nradio_adv/sd.lua) 只建**单分区**并全部给
+#  /overlay。本脚本多切一个 p2，官方也认这个形态 —— 它的分区状态检查里
+#  专门分支处理"多分区"，条件是第二分区卷标为 nradio_user_data，
+#  所以这里两个分区的卷标都照官方原值写。
+#
 #  用法：
 #     sh kp-storage-init.sh             常规执行（带安全闸）
 #     FORCE=1 sh kp-storage-init.sh     明知卡在用也要重建（例如真要推倒重来）
@@ -106,10 +112,13 @@ ui_stage_end
 ui_stage 3 4 "格式化为 f2fs"
 command -v mkfs.f2fs >/dev/null 2>&1 || ui_fail "缺少 mkfs.f2fs（固件自带，本机应有）"
 
-mkfs.f2fs -f -l kpoverlay "$P1" >/dev/null 2>&1 || ui_fail "$P1 格式化失败"
-ui_ok "$P1 → f2fs（卷标 kpoverlay）"
-mkfs.f2fs -f -l kpstorage "$P2" >/dev/null 2>&1 || ui_fail "$P2 格式化失败"
-ui_ok "$P2 → f2fs（卷标 kpstorage）"
+# 卷标刻意用厂商自己的值 —— 固件里的热插拔脚本
+# (/etc/hotplug.d/block/00-mount) 和 LuCI 的 SD 页面 (nradio_adv/sd.lua)
+# 都按这两个名字识别分区，用别的名字会被当成"未初始化"。
+mkfs.f2fs -f -l nradio_tf_overlay "$P1" >/dev/null 2>&1 || ui_fail "$P1 格式化失败"
+ui_ok "$P1 → f2fs（卷标 nradio_tf_overlay，官方值）"
+mkfs.f2fs -f -l nradio_user_data "$P2" >/dev/null 2>&1 || ui_fail "$P2 格式化失败"
+ui_ok "$P2 → f2fs（卷标 nradio_user_data，官方值）"
 ui_stage_end
 
 # ============================ [4/4] 写 fstab ============================

@@ -80,16 +80,37 @@ clear_auto() {
   grep -q 'kp-auto' /etc/rc.local 2>/dev/null && sed -i '/kp-auto/d' /etc/rc.local || :
 }
 
-# ---------------- 往「新卡的 overlay」里预置开机续跑 ----------------
-# 这里是整个一键流程的关键：重启后 /overlay 会换成新卡上的分区，
-# 现在系统里写的任何文件都会随之消失。所以续跑代码必须直接预置进
-# 新卡 p1 的 upper 层（overlayfs 上层优先于 /rom），再由 /rom 自带的
-# /etc/init.d/done（S95done）在开机时执行 /etc/rc.local 把它跑起来。
+# ---------------- 把当前 overlay 迁到新卡，并预置开机续跑 ----------------
+# 这里是整个一键流程的关键，分两件事：
+#
+# 1) 迁移 overlay 内容。新格式化出来的分区是空的，overlayfs 一旦切过去，
+#    /etc 下所有配置都会回落到只读的 /rom 出厂值 —— 而 /rom 的 root 是
+#    **空密码**（`root::0:0:...`），SSH 会直接登不上，LAN IP / 防火墙规则
+#    也会一起回退。所以必须把当前 overlay 的 upper/work 整个搬过去。
+#    这不是我们的发明：厂商自带的 SD 卡页面 sd.lua 里
+#    make_sysupgrade_backup() 就是 `cp -a /overlay/upper` + `/overlay/work`，
+#    并以「卡上存在 upper/etc/config」作为可用的硬判据，这里照办。
+#
+# 2) 预置续跑钩子。重启后 /overlay 换成卡上分区，现在系统里写的文件都会
+#    消失，所以续跑代码要在第 1 步搬完之后、直接写进卡上的 rc.local。
+#    执行它的是 /rom 自带的 /etc/init.d/done（S95done），不依赖 overlay。
 arm_auto() {
   PREP=/mnt/kp-prep
+  # 热插拔脚本可能已经把 p1 挂到 /tmp/storage 下了，先摘掉，避免挂两处
+  umount /tmp/storage/"$(basename "$DISK")p1" /mnt/"$(basename "$DISK")p1" "$PREP" 2>/dev/null || :
   mkdir -p "$PREP"
   mount -t f2fs "${DISK}p1" "$PREP" || { echo "  ! 续跑预置失败：${DISK}p1 挂不上" >&2; return 1; }
-  mkdir -p "$PREP/upper/etc" "$PREP/work"
+
+  rm -rf "$PREP/upper" "$PREP/work"
+  cp -a /overlay/upper "$PREP/upper" 2>/dev/null || :
+  cp -a /overlay/work  "$PREP/work"  2>/dev/null || :
+  if [ ! -d "$PREP/upper/etc/config" ]; then
+    echo "  ! 预置失败：卡上缺少 upper/etc/config（厂商 sd.lua 的可用判据）" >&2
+    umount "$PREP" 2>/dev/null || :
+    return 1
+  fi
+  echo "  ✓ 当前 overlay 配置已整体迁移到卡上（含 SSH 密钥与网络配置）"
+
   cat > "$PREP/upper/etc/rc.local" <<EOF
 #!/bin/sh
 # 本文件由 nros-panel 的 install.sh 预置
@@ -122,7 +143,7 @@ exit 0
 EOF
   chmod 755 "$PREP/upper/etc/rc.local"
   sync
-  umount "$PREP"
+  umount "$PREP" 2>/dev/null || :
   echo "  ✓ 已预置开机续跑"
 }
 
