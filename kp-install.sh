@@ -26,6 +26,11 @@
 # ============================================================================
 set -eu
 
+# set -e 下任何命令返回非 0 都会让脚本**静默退出**（连报错都没有，最难查）。
+# 这个陷阱抓的就是它：中断时打印行号和退出码，让问题一眼可见。
+# 注意用 `|| :` 结尾，否则陷阱自己返回非 0 会再次触发。
+trap 'rc=$?; echo "" >&2; echo "  ✗ 脚本在第 $LINENO 行中断（rc=$rc）—— 上面最后一行输出就是线索" >&2; echo "" >&2' ERR || :
+
 # ============================== 参数（环境变量可覆盖） ==============================
 : "${SUB_URL:=}"                              # 机场订阅地址，留空 = 只装不订阅
 : "${SUB_NAME:=kp}"                           # 订阅显示名
@@ -344,16 +349,20 @@ stage_openclash() {
   # --- 起服务 ---
   # 关键前置：OpenClash 没有配置文件时根本起不来（没东西可跑），
   # 这时去等 7890 是白等 —— 实测每次白耗 1 分钟。所以先看有没有配置再决定等不等。
+  #
+  # ⚠️ 每处 `X=$(cmd)` 后面都必须跟 `|| X=""`：本脚本开了 set -e，而
+  #    「纯赋值语句的退出码 = 命令替换的退出码」—— uci get 对未设置的键返回 1，
+  #    不兜住就会让整个脚本**静默退出**（没有任何报错，最难查的一类）。
   /etc/init.d/openclash enable
-  OC_CONF=$(uci -q get openclash.config.config_path)
-  [ -n "$OC_CONF" ] || OC_CONF=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1)
+  OC_CONF=$(uci -q get openclash.config.config_path) || OC_CONF=""
+  [ -n "$OC_CONF" ] || OC_CONF=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1) || OC_CONF=""
 
   if [ "$CHANGED" = 1 ]; then
     /etc/init.d/openclash restart >/dev/null 2>&1 || /etc/init.d/openclash start
     # 服务起来后主动拉一次订阅，确保配置文件落地
     [ -x /usr/share/openclash/openclash.sh ] && bash /usr/share/openclash/openclash.sh >/dev/null 2>&1 || :
-    OC_CONF=$(uci -q get openclash.config.config_path)
-    [ -n "$OC_CONF" ] || OC_CONF=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1)
+    OC_CONF=$(uci -q get openclash.config.config_path) || OC_CONF=""
+    [ -n "$OC_CONF" ] || OC_CONF=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1) || OC_CONF=""
   else
     /etc/init.d/openclash status 2>/dev/null | grep -q '^running' || /etc/init.d/openclash start
   fi
@@ -422,7 +431,7 @@ stage_docker() {
 
   # 数据根目录必须落在 p2 上：落在 overlay（4G 系统分区）会被镜像吃满，
   # 而且 overlay2 在 overlayfs 上不可用，会静默退化成 vfs。
-  DR=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)
+  DR=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null) || DR=""
   [ "$DR" = "$PANEL_DIR/docker" ] \
     || ui_warn "docker 数据根目录是 $DR（期望 $PANEL_DIR/docker）—— 大概率是数据分区没挂上"
   ui_ok "dockerd $(docker version --format '{{.Server.Version}}' 2>/dev/null) · $(docker info --format '{{.Driver}}' 2>/dev/null) · $DR"
@@ -486,7 +495,7 @@ stage_panel() {
   # 起服务并验活
   /etc/init.d/1paneld status 2>/dev/null | grep -q '^running' || /etc/init.d/1paneld start
   poll 30 port "$PANEL_PORT" || ui_fail "面板端口 $PANEL_PORT 未监听" "看 logread | grep 1panel 排查"
-  CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 8 "http://127.0.0.1:$PANEL_PORT/$PANEL_ENT")
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 8 "http://127.0.0.1:$PANEL_PORT/$PANEL_ENT") || CODE=000
   [ "$CODE" = 200 ] || ui_fail "面板 HTTP 返回 $CODE（期望 200）"
   ! skip docker && { docker info >/dev/null 2>&1 || ui_fail "docker info 失败"; } || :
   ui_ok "面板 HTTP 200 · docker 就绪"
