@@ -94,9 +94,9 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 
 | 阶段 | 做什么 | 关键点 |
 |---|---|---|
-| `[1/4]` 预检与换源 | 修 opkg 源、确保 bash、建 `/tmp/lock` | **出厂 6 个源全部指向已下线的 SNAPSHOT**，必须整体换（见下） |
+| `[1/4]` 预检与换源 | 修 opkg 源、确保 bash、建 `/tmp/lock`、兜底挂数据分区 | **出厂 6 个源全部指向已下线的 SNAPSHOT**，必须整体换（见下） |
 | `[2/4]` OpenClash | 装包 → 拉内核 → 配订阅 → 起服务 | 内核复用 `openclash_core.sh`，3 个 CDN 回退 |
-| `[3/4]` Docker | 装依赖 → 写 `daemon.json` → 起服务 | data-root 落 `/mnt/storage/data/docker`，host 网络 |
+| `[3/4]` Docker | 补 kmod 桩包 → 装包 → 写 **UCI** → 起服务 | data-root 必须落 p2，镜像源也只能写 UCI（见硬事实 5） |
 | `[4/4]` 1Panel | 装面板 → 播种凭据 → 验活 | **必须先写好 `1pctl` 再启动**（数据库由它播种） |
 
 跑完打印汇总，并把手感最要紧的信息写进 `/root/1panel-credentials.txt`（600 权限）。
@@ -127,16 +127,37 @@ src/gz openwrt_routing  https://mirrors.aliyun.com/openwrt/releases/21.02.7/pack
 > `core` 与 target 源**故意不保留**：里面是严格对齐内核 5.4.281 的 kmod，
 > 而官方压根没有 mt7987 这个 target，留着只会让每次 `opkg update` 卡在超时上。
 
-### 2. kmod 依赖只能 `--force-depends` 跳过
+### 2. dockerd 的依赖链要靠"kmod 桩包"补齐
 
-本机内核**没编 veth / br_netfilter**，`kmod-tun`、`iptables` 这类包在 opkg 数据库里
-显示「未安装」，但**模块和命令其实都在**（固件自带）。
+`dockerd` 的 `Depends` 里点名了 6 个 kmod：
 
-- **Docker**：走 `host` 网络 + `bridge: none` + `iptables: false`，完全用不到 veth/bridge
-- **OpenClash**：`kmod-tun` 的 `tun.ko` 就在 `/lib/modules/5.4.281/` 里，`modprobe tun` 正常
+```
+kmod-veth  kmod-dm  kmod-fs-btrfs  kmod-br-netfilter  kmod-ikconfig  kmod-nf-ipvs
+```
 
-所以 `dockerd` / `docker` / OpenClash ipk 一律加 `--force-depends`，
-否则 opkg 会以「依赖不满足」直接拒装。
+厂商固件跑的是 mt7987 **私有内核**（5.4.281），官方源里没有这个 target，
+这 6 个包**根本不存在**。opkg 在「挑选候选包」这一步就选不出来，报的却是
+极易误导的文案：
+
+```
+Packages for dockerd found, but incompatible with the architectures configured
+```
+
+> 实测 `--force-depends` **完全无效**：那个开关只跳过「装包时」的依赖检查，
+> 而失败发生在更早的「选候选包」阶段。所以看到上面那句报错时，
+> 别去折腾 `--force-depends`，也别去查 opkg 架构 —— 架构是对的
+> （`Architecture: aarch64_cortex-a53` 与 `DISTRIB_ARCH` 一致）。
+
+脚本的做法：现场用 busybox 打一个**只声明 `Provides` 的桩包**（`install_kmod_stub()`），
+把这 6 个名字一次性"认领"掉，依赖链闭合后 `dockerd` 照常装上，
+其余依赖（containerd / runc / libdevmapper…）都是真包，正常下载。
+
+本机跑 host 网络、overlay2 落 f2fs，这 6 个 kmod 运行时一个都用不到；
+已装过（`kmod-kp-stub` 在 opkg 状态里）或 6 个 kmod 本来就认得时，函数直接返回，幂等。
+
+同样地，`kmod-tun`、`iptables` 这类包在 opkg 数据库里显示「未安装」，
+但**模块和命令其实都在固件里**（`tun.ko` 就在 `/lib/modules/5.4.281/`），
+所以 OpenClash 的 ipk 也走 `--force-depends`。
 
 ### 3. 重启会换掉整个 overlay：既要搬内容，也要预置续跑钩子
 
@@ -198,6 +219,69 @@ src/gz openwrt_routing  https://mirrors.aliyun.com/openwrt/releases/21.02.7/pack
 **如果续跑时看到「存储未就绪」但卡明明是好的** —— 那是就绪判据或 p2 挂载的问题，
 `kp-storage-init.sh` 的安全闸会拦下重复清卡（它检查 `/overlay` 是否已在这张卡上），
 不会造成数据损失。
+
+### 5. dockerd 的配置只认 UCI，写 `daemon.json` 是无效的
+
+固件自带的 `/etc/init.d/dockerd` 是这样工作的：
+
+```
+UCI (/etc/config/dockerd)  ──渲染──▶  /tmp/dockerd/daemon.json
+                                          │
+                          dockerd --config-file=/tmp/dockerd/daemon.json
+```
+
+也就是说**直接往 `/etc/docker/daemon.json` 写配置根本没人读**。实测这么干的结果：
+
+| 期望 | 实际 |
+|---|---|
+| `Docker Root Dir: /mnt/storage/data/docker` | **`/opt/docker`**（落在 4G 系统分区上，镜像会把它吃满） |
+| `Storage Driver: overlay2` | **`vfs`**（又慢又占空间） |
+| 镜像加速生效 | 拉 `registry-1.docker.io` **15 秒超时** |
+
+init 里有一条 `alt_config_file`，设了它才会把 `/tmp/dockerd/daemon.json` 软链到外部文件 ——
+但那条路会一并绕开 iptables、镜像源等其它 UCI 项，更绕，不采用。
+
+所以脚本统一走 UCI（`config_dockerd()`）：
+
+```sh
+uci set dockerd.globals.data_root='/mnt/storage/data/docker'   # 镜像容器落 p2
+uci set dockerd.globals.log_level='warn'                        # 别把 NOR 后备根写爆
+uci add_list dockerd.globals.registry_mirrors='https://docker.1ms.run'
+uci add_list dockerd.globals.registry_mirrors='https://docker.m.daocloud.io'
+```
+
+改完 `Docker Root Dir` 立刻正确、驱动回到 `overlay2`、拉 `hello-world` **5 秒**完成。
+脚本在起服务后还会核对一次 `docker info` 的 `DockerRootDir`，不对就告警
+（多半是数据分区没挂上，见硬事实 4）。
+
+### 6. 系统分区装不开时，扩容必须在"NOR 窗口"里做
+
+`resize.f2fs` 里有这么一句硬错误串：**`Error: Not available on mounted device!`**
+—— 它**拒绝对已挂载的文件系统操作**。而 `/overlay` 就是 `/`，永远挂着；
+`/etc/config/fstab` 里改 fstab 也没用，因为扩容窗口只在开机早期存在。
+
+而厂商的 `/lib/preinit/80_mount_root` 里 `pivot_tf_overlay()` **硬编码了**
+`/dev/mmcblk0p1`，所以 overlay 也不能挪到别的分区去。
+
+唯一可行的窗口：**开机瞬间系统临时落在 NOR 的 `rootfs_data`（`/dev/mtdblock8`）上，
+此时 TF 卡还没被挂载**。利用它分三步（本套件实测跑通，卡上数据零丢失）：
+
+```
+1. 在线改分区表：fdisk 把 p1 改大（起始扇区 16 保持不变）、重建 p2
+2. 把 /overlay 那条 fstab 条目的 enabled 临时改成 0，并在
+   /mnt/mtdblock8/upper/etc/{kp-resize.sh,rc.local} 里预置一次性任务
+   （该分区同时是"卡失联时的备用根"，所以顺手把 shadow/dropbear/网络配置复制过去兜底）
+3. reboot → 落在备用根 → 任务里先摘掉热插拔挂的 p1 → resize.f2fs 撑满 →
+   mkfs p2 → 恢复 fstab → 再 reboot，系统带着更大的分区回来
+```
+
+> 细节坑：热插拔脚本可能已经把 p1 挂到 `/tmp/storage/mmcblk0p1`，
+> 那样 `resize.f2fs` 依然会以 mounted 为由拒绝 —— **必须先 umount 再扩容**。
+> 另外 `resize.f2fs` 的输出极其啰嗦（每迁移一个块打一行，几万行），
+> 重定向到日志时注意别把 tmpfs 写满。
+
+**用一键脚本扩容更省事的办法**：`OVERLAY_SIZE=16G REBUILD=1 sh /tmp/kp.sh`
+（走的是重建流程，会清空卡，所以先把要留的数据拷出来）。
 
 ---
 
@@ -290,6 +374,10 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 | `数据分区 /mnt/storage/data 未挂载` | 通常已由 `ensure_data()` 自动兜底。仍失败就手动 `umount /tmp/storage/mmcblk0p2 && mount -t f2fs /dev/mmcblk0p2 /mnt/storage/data`；持久化靠 `/etc/init.d/kp-storage`（见硬事实 4） |
 | 续跑时报「存储未就绪」但卡是好的 | 就绪判据已改为「`/overlay` 是否在 `/dev/mmcblk0p1`」。若仍出现，说明 `/overlay` 没切过来，检查 `/etc/config/fstab` 里那条 `/overlay` 的 `enabled` 是否为 `1` |
 | `dockerd 安装失败` | 看 `opkg update` 是否报源错误；源不对时先检查 `distfeeds.conf.kp-bak` |
+| `Unknown package 'dockerd'` / `...incompatible with the architectures configured` | **不是架构问题，是 kmod 依赖选不出候选包**（见硬事实 2）。确认 `install_kmod_stub()` 跑过：`opkg status kmod-kp-stub` |
+| 拉镜像超时（`registry-1.docker.io` 无响应） | 镜像加速必须写在 UCI：`uci show dockerd.globals.registry_mirrors`，空的就是没配上（见硬事实 5） |
+| `Docker Root Dir` 是 `/opt/docker` 或驱动是 `vfs` | 数据分区没挂上，或配置写到了 `daemon.json`（没人读）。先看 `/etc/config/fstab` 与 `mount \| grep storage` |
+| `failed to add the host <=> sandbox (veth...) pair interfaces` | 内核没有 veth，容器**只能**用 `--network host`（见已知边界） |
 | 7890 未监听 | 多半是订阅或内核还没就绪，去 LuCI → OpenClash 完成一次配置 |
 | 面板端口未监听 | `logread \| grep 1panel`；端口冲突用 `PANEL_PORT=` 换一个 |
 | 卡识别不到 | 断电 30 秒 → 取出卡擦净金手指 → 重插到底（软件层无解：3.3V 是 fixed 稳压器，没软件开关） |
@@ -298,7 +386,12 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 
 ## 已知边界
 
-- **Docker 只能 host 网络**：内核没编 veth / br_netfilter，端口映射不可用
-- **`/overlay` 建议 ≥ 4G**：OpenClash 内核 46MB，装不进 NOR 的 2MB 分区
+- **容器只能用 host 网络**：内核没编 veth，`docker run` 加默认 bridge 会直接报
+  `failed to add the host <=> sandbox (veth...) pair interfaces: operation not supported`。
+  1Panel 里部署应用时把网络模式改成 **host**。`docker0` 网桥本身能建起来
+  （所以 dockerd 能正常启动），只是容器接不上去。
+- **`/overlay` 建议 ≥ 4G**：OpenClash 内核 46MB，装不进 NOR 的 2MB 分区。
+  默认给 16G，够装任何软件（见硬事实 6 的扩容办法）
 - **992MB 内存**：跑 Jellyfin 这类应用前先确认 `/config` 和 `/cache` 都在卡上，别落 overlay
 - **删容器别用 `docker system prune -a`**：会误删没有运行容器的镜像
+- **docker 数据目录别放回 `/opt/docker`**：那在 4G 系统分区里，几个镜像就满了（见硬事实 5）

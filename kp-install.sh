@@ -18,7 +18,7 @@
 #  四个阶段（想改哪块，就找对应函数）：
 #     [1/4] 预检与换源   修 opkg 源（出厂 SNAPSHOT 源已 404）
 #     [2/4] OpenClash    装包 → 拉内核 → 配订阅 → 起服务
-#     [3/4] Docker       装依赖 → 写 daemon.json → 起服务
+#     [3/4] Docker       补 kmod 桩包 → 装包 → 写 UCI → 起服务
 #     [4/4] 1Panel       装面板 → 播种凭据 → 验活
 #     跑完打印汇总（汇总不是阶段，没有编号）
 #
@@ -40,6 +40,7 @@ set -eu
 : "${PANEL_PASS:=}"                           # 留空 = 随机生成
 : "${PANEL_ENT:=}"                            # 面板入口路径，留空 = 随机生成
 : "${ONEPANEL_VER:=v1.10.34-lts}"
+: "${DOCKER_MIRRORS:=https://docker.1ms.run https://docker.m.daocloud.io}"  # 国内镜像加速（空格分隔）
 : "${SKIP:=}"                                 # 逗号分隔要跳过的阶段：oc,docker,panel
 : "${CRED:=/root/1panel-credentials.txt}"     # 凭据落盘位置
 
@@ -194,6 +195,36 @@ install_kmod_stub() {
   opkg install --force-depends "$STUB_IPK" >/dev/null 2>&1 \
     || ui_fail "kmod 桩包安装失败" "确认 /tmp 可写、opkg 没被其他进程占用"
   ui_info "已补 kmod 桩包（厂商内核没有这些 kmod，运行时用不到）：$KMOD_STUBS"
+}
+
+# ---------------- dockerd 配置（只走 UCI） ----------------
+# 为什么不用 /etc/docker/daemon.json：固件自带的 /etc/init.d/dockerd 会把 **UCI**
+# 渲染成 /tmp/dockerd/daemon.json，再用 `dockerd --config-file` 加载它。
+# 也就是说直接往 /etc/docker/daemon.json 写配置根本没人读 —— 实测这样跑出来的
+# Docker Root Dir 还是 UCI 默认的 /opt/docker（落在 4G 系统分区上，镜像会把它吃满），
+# 存储驱动也退化成 vfs。它只有在 UCI 里设了 alt_config_file 时才会软链外部文件，
+# 但那条路更绕且会绕开 iptables / 镜像源等其它 UCI 项，所以统一用 UCI。
+# 三个值的作用：
+#   data_root        —— 镜像/容器全落到 p2 大分区，不吃系统分区
+#   log_level        —— warn，别让 json 日志把 2MB NOR 后备根写爆
+#   registry_mirrors —— 国内直连 registry-1.docker.io 必超时（实测 15s 无响应）
+config_dockerd() {
+  CH=0
+  [ "$(uci -q get dockerd.globals.data_root)" = "$PANEL_DIR/docker" ] \
+    || { uci set dockerd.globals.data_root="$PANEL_DIR/docker"; CH=1; }
+  [ "$(uci -q get dockerd.globals.log_level)" = warn ] \
+    || { uci set dockerd.globals.log_level=warn; CH=1; }
+  if [ -z "$(uci -q get dockerd.globals.registry_mirrors)" ]; then
+    for m in $DOCKER_MIRRORS; do uci add_list dockerd.globals.registry_mirrors="$m"; done
+    CH=1
+  fi
+  if [ "$CH" = 1 ]; then
+    uci commit dockerd
+    /etc/init.d/dockerd restart >/dev/null 2>&1 || :
+    ui_ok "UCI 已配置：数据目录 $PANEL_DIR/docker · 镜像加速 $(echo $DOCKER_MIRRORS | wc -w) 个"
+  else
+    ui_ok "UCI 配置已就绪（数据目录 $(uci -q get dockerd.globals.data_root)）"
+  fi
 }
 
 # 同步鲲鹏应用商店的 JSON 注册表（有 installed.list 才做）
@@ -369,40 +400,18 @@ stage_docker() {
   pkg docker-compose >/dev/null 2>&1 || ui_warn "docker-compose 缺失：面板能用，但商店部署应用会失败"
   pkg zoneinfo-asia  >/dev/null 2>&1 || :
 
-  # daemon.json 已存在就不动（1Panel 官方脚本会把它覆盖成单镜像源，别让它得逞）
-  if [ ! -f /etc/docker/daemon.json ]; then
-    mkdir -p /etc/docker
-    cat > /etc/docker/daemon.json <<EOF
-{
-  "data-root": "$PANEL_DIR/docker",
-  "storage-driver": "overlay2",
-  "bridge": "none",
-  "iptables": false,
-  "log-level": "warn",
-  "log-driver": "json-file",
-  "log-opts": { "max-size": "10m", "max-file": "3" },
-  "registry-mirrors": ["https://docker.1ms.run", "https://docker.m.daocloud.io"]
-}
-EOF
-    ui_ok "daemon.json 已写入（host 网络优先，overlay2 落在 $PANEL_DIR/docker）"
-  elif [ "${DOCKER_ENABLE_BRIDGE:-0}" = 1 ] && grep -q '"iptables" *: *false' /etc/docker/daemon.json; then
-    # 需要端口映射才开：会建 docker 防火墙区，并把 bridge/iptables 打开
-    cp /etc/docker/daemon.json /etc/docker/daemon.json.kp_bak   # 备份必须在修改之前
-    /etc/init.d/dockerd stop >/dev/null 2>&1 || :
-    /etc/init.d/dockerd uciadd >/dev/null 2>&1 || ui_warn "uciadd 失败（docker 防火墙区未建）"
-    sed -i -e '/"bridge"/d' -e 's/"iptables" *: *false/"iptables": true/' /etc/docker/daemon.json
-    ui_ok "已切网桥模式（原配置备份在 daemon.json.kp_bak）"
-  fi
-
-  # 让 dockerd 用我们这份配置：init 只认 alt_config_file 的软链，直接写文件是无效的
-  [ "$(uci -q get dockerd.globals.alt_config_file)" = /etc/docker/daemon.json ] || {
-    uci set dockerd.globals.alt_config_file='/etc/docker/daemon.json'
-    uci commit dockerd
-  }
+  # 配置走 UCI（原因见 config_dockerd 的注释：固件 init 只认 UCI）
+  config_dockerd
 
   docker info >/dev/null 2>&1 || { /etc/init.d/dockerd enable; /etc/init.d/dockerd start; }
   poll 30 docker info || ui_fail "dockerd 未就绪" "看 logread | grep dockerd 排查"
-  ui_ok "dockerd $(docker version --format '{{.Server.Version}}' 2>/dev/null) · $(docker info --format '{{.Driver}}' 2>/dev/null)"
+
+  # 数据根目录必须落在 p2 上：落在 overlay（4G 系统分区）会被镜像吃满，
+  # 而且 overlay2 在 overlayfs 上不可用，会静默退化成 vfs。
+  DR=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)
+  [ "$DR" = "$PANEL_DIR/docker" ] \
+    || ui_warn "docker 数据根目录是 $DR（期望 $PANEL_DIR/docker）—— 大概率是数据分区没挂上"
+  ui_ok "dockerd $(docker version --format '{{.Server.Version}}' 2>/dev/null) · $(docker info --format '{{.Driver}}' 2>/dev/null) · $DR"
   ui_stage_end
 }
 
