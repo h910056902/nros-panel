@@ -70,6 +70,13 @@ if [ ! -f "$KP_DIR/kp-ui.sh" ]; then
 fi
 . "$KP_DIR/kp-ui.sh"
 
+# 商店注册共享库：kp-ocspeed.sh 独立运行时也要用同一套实现，别复制第二份
+if [ ! -f "$KP_DIR/kp-store-lib.sh" ]; then
+  echo "缺少商店注册库 kp-store-lib.sh —— 它必须和本脚本放在同一个目录里" >&2
+  exit 1
+fi
+. "$KP_DIR/kp-store-lib.sh"
+
 AVAIL=$(df -h "$PANEL_DIR" 2>/dev/null | awk 'NR==2{print $4}')
 ui_init "鲲鹏路由器 · 一键恢复" "外网 OpenClash  ·  Docker  ·  1Panel"
 ui_meta 设备 "$(cat /tmp/sysinfo/model 2>/dev/null || echo Unknown) · $(uname -m) · kernel $(uname -r)"
@@ -238,227 +245,8 @@ config_dockerd() {
 # /etc/kp_store/routes.list 读本地路由，补进商店列表数据。
 # 注意：改控制器后必须清 /tmp/luci-modulecache（LuCI 字节码缓存）
 # 并重启 uhttpd，否则改动不生效 —— 实测踩过。
-patch_store_open() {
-  local lua=/usr/lib/lua/luci/controller/nradio_adv/appcenter.lua
-  [ -f "$lua" ] || return 0
-  if grep -q kp_local_route "$lua"; then return 0; fi
-
-  [ -f "$lua.kp-bak" ] || cp "$lua" "$lua.kp-bak"
-  cat >> "$lua" <<'LUAEOF'
-
--- kp_local_route: 让"本地注册"的应用也能被打开。
--- 守护进程只给远程目录里的应用下发 luci_module_route，而且会把
--- /etc/config/appcenter 里它不认识的 option 重写掉（实测丢弃）。
--- 所以本地路由放在守护进程碰不到的 /etc/kp_store/routes.list
--- （每行 `应用名|路由`），这里后定义覆盖原函数注入列表数据。
-function action_app_list_data()
-	local util = require "luci.util"
-	local lng = require "luci.i18n"
-	local applist = util.ubus("appcenter", "list") or {parameter={applist={}}}
-	if applist and applist.parameter and applist.parameter.applist then
-		local kp_r = {}
-		local f = io.open("/etc/kp_store/routes.list", "r")
-		if f then
-			for l in f:lines() do
-				local n, rt = l:match("^(.-)|(.*)$")
-				if n and rt and #rt > 0 then kp_r[n] = rt end
-			end
-			f:close()
-		end
-		for _,v in ipairs(applist.parameter.applist) do
-			if v.name and #v.name > 0 then
-				v.name_lng = lng.translate("AppcenterKey_"..v.name)
-				if v.name_lng:match("^AppcenterKey_") then v.name_lng = "" end
-			end
-			if v.des and #v.des > 0 then
-				v.description_lng = lng.translate("AppcenterDes_"..v.name)
-				if v.description_lng:match("^AppcenterDes_") then v.description_lng = "" end
-			end
-			if (not v.luci_module_route or #v.luci_module_route == 0) and kp_r[v.name] then
-				v.luci_module_route = kp_r[v.name]
-			end
-		end
-	end
-	return applist.parameter
-end
-LUAEOF
-  # 语法不对就回滚，绝不让商店页面打不开
-  if ! lua -e "assert(loadfile('$lua'))" >/dev/null 2>&1; then
-    cp "$lua.kp-bak" "$lua"
-    ui_warn "Lua 补丁语法异常，已回滚（商店'打开'按钮维持原状）"
-    return 0
-  fi
-  rm -rf /tmp/luci-modulecache /tmp/luci-indexcache
-  /etc/init.d/uhttpd restart >/dev/null 2>&1 || :
-  ui_ok "已打通商店'打开'按钮（本地应用路由注入）"
-}
-
-# 给「不走 opkg 安装」的应用造占位包。
-# 商店守护进程是按 `opkg info` 判「已安装 / 未安装」的，1Panel 由官方脚本安装、
-# 在 opkg 数据库里查无此包，直接注册会永远显示「未安装」，点安装还会去拉不存在的
-# 包而报错。所以先造一个空内容占位包让 opkg 认账。
-# 包体是空的（只有一个 README）；商店里的「卸载」只会删掉这个占位包，
-# 真正的卸载走 `1pctl uninstall`（凭据文件里有写）。
-install_app_stub() {
-  local name="$1" ver="$2" des="$3"
-  opkg status "$name" 2>/dev/null | grep -q 'Status:' && return 0
-  local arch D=/tmp/kpstub-$name
-  arch=$(sed -n 's/^DISTRIB_ARCH=//p' /etc/openwrt_release 2>/dev/null | tr -d "'\"")
-  [ -n "$arch" ] || arch=aarch64_cortex-a53
-  rm -rf "$D"
-  mkdir -p "$D/control" "$D/data/usr/share/$name"
-  {
-    echo "Package: $name"
-    echo "Version: $ver"
-    echo "Depends: libc"
-    echo "Section: utils"
-    echo "Architecture: $arch"
-    echo "Installed-Size: 1"
-    echo "Description: $des"
-  } > "$D/control/control"
-  : > "$D/control/conffiles"
-  echo "$des" > "$D/data/usr/share/$name/README"
-  ( cd "$D/control" && tar -czf "$D/control.tar.gz" ./control ./conffiles )
-  ( cd "$D/data"    && tar -czf "$D/data.tar.gz" . )
-  ( cd "$D" && echo 2.0 > debian-binary \
-    && tar -czf "/tmp/$name.ipk" ./debian-binary ./control.tar.gz ./data.tar.gz )
-  if opkg install "/tmp/$name.ipk" >/dev/null 2>&1; then
-    rm -rf "$D"
-  else
-    ui_warn "$name 占位包安装失败（商店状态可能显示「未安装」，不影响使用）"
-  fi
-}
-
-# 1Panel 的「打开」承载页。
-# 商店的打开按钮 = iframe 加载 `/cgi-bin/luci/<路由>`，而 1Panel 跑在独立端口上、
-# 不是 LuCI 页面，所以造一个同源承载页，由它再套一层 iframe 指向面板。
-# 面板地址从 `1pctl user-info` 动态读，端口或入口改了也不用动脚本。
-install_panel_page() {
-  local ctl=/usr/lib/lua/luci/controller/nradio_adv/kp1panel.lua
-  local dir=/usr/lib/lua/luci/view/nradio_kp1panel
-  mkdir -p "$dir"
-  cat > "$ctl" <<'CTLEOF'
-module("luci.controller.nradio_adv.kp1panel", package.seeall)
-
-function index()
-    entry({"nradioadv", "system", "kp1panel"}, template("nradio_kp1panel/panel"), nil, nil, true).leaf = true
-end
-CTLEOF
-  cat > "$dir/panel.htm" <<'HTMEOF'
-<%-
-local uci = require "luci.model.uci".cursor()
-local lan = uci:get("network", "lan", "ipaddr") or "192.168.66.1"
-local h = io.popen("1pctl user-info 2>/dev/null | grep -oE 'http://[^ ]*' | head -1")
-local url = h:read("*l") or ""
-h:close()
-url = url:gsub("%$LOCAL_IP", lan)
-if url == "" then url = "http://" .. lan .. ":10090" end
--%>
-<div class="cbi-map" style="padding:0;margin:0">
-<iframe src="<%=url%>" style="width:100%;height:calc(100vh - 40px);border:0"></iframe>
-</div>
-HTMEOF
-  # 语法不对就撤销，绝不让商店页面因为我们的文件打不开
-  if ! lua -e "assert(loadfile('$ctl'))" >/dev/null 2>&1; then
-    rm -f "$ctl"
-    ui_warn "1Panel 承载页异常，已撤销"
-    return 0
-  fi
-  rm -rf /tmp/luci-modulecache /tmp/luci-indexcache
-  /etc/init.d/uhttpd restart >/dev/null 2>&1 || :
-}
-
-# 注册应用到鲲鹏商店（原生面板 → 应用中心）。
-# 真实机制（真机逆向确认）：
-#   · 商店目录 = /etc/config/appcenter（UCI），守护进程 /usr/sbin/appcenter 提供 ubus 接口
-#   · 「已安装」状态由守护进程对 package_list 里每个包名跑 `opkg info` 实时判定，
-#     所以只要包真的装了，状态就一定是准的 —— 不造假、无需手动维护
-#   · 「卸载」按钮会真跑 `opkg remove`，行为一致
-#   · 「打开」按钮 = iframe 加载 luci_module_route；守护进程只给远程目录里的
-#     应用发这个字段（UCI 里手写会被它重写丢弃），所以本地路由放在它碰不到的
-#     /etc/kp_store/routes.list，由 patch_store_open() 注入的 Lua 覆盖函数读取
-# 用法：register_store <显示名> <图标名> <描述> <打开路由> <子包1> [子包2 ...]
-# 幂等：先把同名旧条目删干净再重写，版本/体积每次取实时值。
-register_store() {
-  local app="$1" icon="$2" des="$3" route="$4" && shift 4
-  have uci || return 0
-  [ -x /usr/sbin/appcenter ] || { ui_warn "应用商店组件不存在，跳过 $app 注册"; return 0; }
-
-  # 路由表：一行一个 `应用名|路由`，守护进程不会碰这个文件
-  if [ -n "$route" ]; then
-    mkdir -p /etc/kp_store
-    touch /etc/kp_store/routes.list
-    grep -v "^${app}|" /etc/kp_store/routes.list > /etc/kp_store/routes.list.tmp || :
-    mv /etc/kp_store/routes.list.tmp /etc/kp_store/routes.list
-    echo "$app|$route" >> /etc/kp_store/routes.list
-    patch_store_open
-  fi
-
-  # 图标：优先用应用自带 logo（调用方先拷进商店图标目录），缺失则回退默认图标
-  local icon_dir=/www/luci-static/nradio/images/icon
-  [ -f "$icon_dir/$icon" ] || icon=app_default.png
-
-  # --- 删旧条目（删除会让索引左移，所以只在没删时才 ++） ---
-  local i=0 sec
-  while uci -q get appcenter.@package[$i] >/dev/null 2>&1; do
-    if [ "$(uci -q get appcenter.@package[$i].name)" = "$app" ]; then
-      uci delete appcenter.@package[$i]
-    else
-      i=$((i+1))
-    fi
-  done
-  i=0
-  while uci -q get appcenter.@package_list[$i] >/dev/null 2>&1; do
-    if [ "$(uci -q get appcenter.@package_list[$i].parent)" = "$app" ]; then
-      uci delete appcenter.@package_list[$i]
-    else
-      i=$((i+1))
-    fi
-  done
-
-  # --- 子包条目：包名/版本/体积全部取 opkg 实时值，status 由守护进程自己判 ---
-  local pkg ver size total=0 first_ver=""
-  for pkg in "$@"; do
-    ver=$(opkg info "$pkg" 2>/dev/null | awk '/^Version:/{print $2; exit}')
-    [ -n "$ver" ] || ver=unknown
-    [ -n "$first_ver" ] || first_ver=$ver
-    size=$(opkg files "$pkg" 2>/dev/null | sed 1d | xargs du -ck 2>/dev/null | awk '/total$/{print $1; exit}')
-    [ -n "$size" ] || size=0
-    total=$((total + size))
-    sec=$(uci add appcenter package_list)
-    uci set appcenter.$sec.name="$pkg"
-    uci set appcenter.$sec.pkg_name="$pkg"
-    uci set appcenter.$sec.parent="$app"
-    uci set appcenter.$sec.size="$((size * 1024))"
-    uci set appcenter.$sec.version="$ver"
-    uci set appcenter.$sec.has_luci='0'
-    uci set appcenter.$sec.type='0'
-  done
-
-  # 非 opkg 安装的应用（如 1Panel）算不出体积，调用方可用 STORE_SIZE_KB 指定
-  [ -n "${STORE_SIZE_KB:-}" ] && total=$STORE_SIZE_KB
-
-  # --- 主条目（商店卡片）：size 单位是字节（与出厂条目一致） ---
-  sec=$(uci add appcenter package)
-  uci set appcenter.$sec.name="$app"
-  uci set appcenter.$sec.version="$first_ver"
-  uci set appcenter.$sec.icon="$icon"
-  uci set appcenter.$sec.des="$des"
-  uci set appcenter.$sec.size="$((total * 1024))"
-  uci set appcenter.$sec.status='1'
-  uci set appcenter.$sec.has_luci='1'
-  uci set appcenter.$sec.open='0'
-  uci commit appcenter
-
-  # --- 重启守护进程让 ubus 列表生效，并验证 ---
-  /etc/init.d/appcenter restart >/dev/null 2>&1 || :
-  sleep 2
-  if ubus call appcenter list 2>/dev/null | grep -q "\"name\": \"$app\""; then
-    ui_ok "已注册鲲鹏商店：$app（原生面板 → 应用中心可见）"
-  else
-    ui_warn "$app 商店注册未生效（不影响应用本身）"
-  fi
-}
+# 商店注册（register_store / patch_store_open / install_app_stub / install_panel_page）
+# 实现统一在共享库 kp-store-lib.sh —— kp-ocspeed.sh 也要注册，两份实现必然漂移。
 
 # ============================== [1/4] 预检与换源 ==============================
 stage_env() {
@@ -676,6 +464,12 @@ stage_docker() {
   # 判据刻意用 dockerd（守护进程）而不是 docker（CLI）—— 它们是两个独立的包。
   # 踩过的坑：只判 `have docker` 时，一旦 CLI 先装上了、守护进程没装上，
   # 再次运行整段就被跳过，永远修不回来。
+  # 数据目录先建出来。dockerd 启动时会自己建，但那是在它已经决定用哪个目录之后
+  # —— 提前建可以让「p2 没挂上」在这里就暴露成 mkdir 失败，而不是等到后面
+  # 发现 Docker Root Dir 不对（那时已经装完，排查要绕一圈）。
+  mkdir -p "$PANEL_DIR/docker" \
+    || ui_fail "Docker 数据目录建不了" "确认数据分区已挂载：df -h $PANEL_DIR"
+
   if [ ! -x /usr/bin/dockerd ]; then
     install_kmod_stub      # 原因见函数注释：厂商内核缺 6 个 kmod，依赖链要先补闭合
     pkg dockerd || ui_fail "dockerd 安装失败" "看上方 opkg 输出定位是哪一步"
@@ -689,7 +483,10 @@ stage_docker() {
   # 配置走 UCI（原因见 config_dockerd 的注释：固件 init 只认 UCI）
   config_dockerd
 
-  docker info >/dev/null 2>&1 || { /etc/init.d/dockerd enable; /etc/init.d/dockerd start; }
+  # 自启无条件开：dockerd 可能已经在上一次半途装好并在跑了，只判 `docker info`
+  # 的话就会跳过 enable，重启后容器全不起来（踩过）。
+  /etc/init.d/dockerd enable >/dev/null 2>&1 || :
+  docker info >/dev/null 2>&1 || /etc/init.d/dockerd start
   poll 30 docker info || ui_fail "dockerd 未就绪" "看 logread | grep dockerd 排查"
 
   # 数据根目录必须落在 p2 上：落在 overlay（4G 系统分区）会被镜像吃满，
@@ -698,7 +495,62 @@ stage_docker() {
   [ "$DR" = "$PANEL_DIR/docker" ] \
     || ui_warn "docker 数据根目录是 $DR（期望 $PANEL_DIR/docker）—— 大概率是数据分区没挂上"
   ui_ok "dockerd $(docker version --format '{{.Server.Version}}' 2>/dev/null) · $(docker info --format '{{.Driver}}' 2>/dev/null) · $DR"
+
+  # veth 缺失是本机的硬约束（厂商没编译，kmod-veth 还是个空包），
+  # 桥接网络一定会报 veth pair 失败 —— 提前说清楚，省得后面一个个容器踩。
+  if [ "$(lsmod 2>/dev/null | grep -c '^veth')" = 0 ]; then
+    ui_warn "内核无 veth：容器请用 --network host（桥接会报 veth pair 失败）"
+  fi
+
+  docker_smoke
   ui_stage_end
+}
+
+# 冒烟测试：真拉一个镜像再跑一次。
+# 为什么不能只看 docker info：info 通只代表守护进程活着，镜像其实根本拉不下来
+# （本机直连 registry-1.docker.io 实测 15s 无响应；镜像站也有挂的时候）。
+# 拉不动就逐个加速镜像单独试，把能用的那个留在 UCI 里。
+docker_smoke() {
+  [ "${DOCKER_SMOKE:-1}" = 1 ] || { ui_info "按 DOCKER_SMOKE=0 跳过拉镜像冒烟"; return 0; }
+
+  # 运行一律带 --network host：本机没有 veth（厂商内核没编译，kmod-veth 是空包），
+  # 默认桥接会在建 veth pair 时直接失败 ——
+  #   failed to add the host (veth...) <=> sandbox (veth...) pair interfaces:
+  #   operation not supported
+  # 这是内核能力缺失，不是配置问题，改 daemon.json 也没用。
+  local net_arg="--network host"
+
+  if docker images -q 2>/dev/null | grep -q .; then
+    ui_info "已有本地镜像，跳过拉取；仍然跑一次容器验证运行时"
+    docker run --rm $net_arg hello-world >/dev/null 2>&1 \
+      && ui_ok "容器运行冒烟通过（host 网络）" \
+      || ui_warn "hello-world 运行失败（看 docker logs 定位）"
+    return 0
+  fi
+
+  if docker pull hello-world >/dev/null 2>&1; then
+    ui_ok "镜像拉取冒烟通过（当前加速镜像可用）"
+    docker run --rm $net_arg hello-world >/dev/null 2>&1 \
+      && ui_ok "容器运行冒烟通过（host 网络）" \
+      || ui_warn "hello-world 运行失败（看 docker logs 定位）"
+    return 0
+  fi
+
+  local m
+  for m in $DOCKER_MIRRORS; do
+    ui_info "当前镜像拉取失败，单独试加速镜像 $m ..."
+    uci -q delete dockerd.globals.registry_mirrors
+    uci add_list dockerd.globals.registry_mirrors="$m"
+    uci commit dockerd
+    /etc/init.d/dockerd restart >/dev/null 2>&1 || :
+    poll 20 docker info || continue
+    if docker pull hello-world >/dev/null 2>&1; then
+      ui_ok "镜像拉取冒烟通过（加速镜像 $m）"
+      docker run --rm $net_arg hello-world >/dev/null 2>&1 || ui_warn "hello-world 运行失败"
+      return 0
+    fi
+  done
+  ui_warn "hello-world 拉取失败：加速镜像都不通或网络受限（dockerd 本身仍可用）"
 }
 
 # ============================== [4/4] 1Panel ==============================

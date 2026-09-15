@@ -25,6 +25,7 @@
 #      install.sh          本文件：引导器 + 流程编排
 #      kp-ui.sh            终端界面库（改界面只改它）
 #      kp-install.sh       主安装脚本：换源 / OpenClash / Docker / 1Panel
+#      kp-ocspeed.sh       OpenClash 自动测速插件（自建，opkg 里没有）
 #      kp-storage-init.sh  TF 卡分区与格式化
 #      kp-ui-preview.sh    界面预览（本地开发用，设备上不需要）
 # ============================================================================
@@ -79,7 +80,9 @@ fetch() {
 pass() {
   for v in FORCE SUB_URL SUB_NAME SUB_UA CORE_TYPE OC_VER PANEL_PORT PANEL_DIR \
            PANEL_USER PANEL_PASS PANEL_ENT SKIP DOCKER_ENABLE_BRIDGE \
-           DISK OVERLAY_SIZE DATA_DIR NO_REBOOT; do
+           DISK OVERLAY_SIZE DATA_DIR NO_REBOOT \
+           OCS_GROUP OCS_INTERVAL OCS_ENABLE OCS_RUN OCS_STORE \
+           DOCKER_MIRRORS DOCKER_SMOKE APPS; do
     eval "val=\${$v:-}"
     if [ -n "$val" ]; then export "$v=$val"; fi
   done
@@ -161,11 +164,21 @@ EOF
 # ---------------- 取脚本并执行（界面库必须与主脚本同目录）----------------
 run() {
   fetch kp-ui.sh || return 1
+  fetch kp-store-lib.sh || return 1   # 商店注册共享库（kp-install / kp-ocspeed 都用）
   fetch "$1"     || return 1
   pass
+  export KP_TMP="$TMP"   # 子脚本复用已下载的文件，避免重复拉取
   echo
   echo ">>> 执行 $1"
   sh "$TMP/$1"
+}
+
+# 跳过列表里是否含某项（SKIP=oc,docker,panel,ocspeed）
+skip_has() {
+  case ",${SKIP:-}," in
+    *",$1,"*) return 0 ;;
+    *)        return 1 ;;
+  esac
 }
 
 # ============================== 主流程 ==============================
@@ -202,6 +215,13 @@ if [ "${REBUILD:-0}" != 1 ] \
     echo "  ✗ 安装中断。脚本是幂等的 —— 修掉上面报的问题后，重跑同一条命令即可。" >&2
     exit 1
   }
+
+  # ---------- ocspeed 自动测速（OpenClash 之上的自建插件）----------
+  # 它不在任何 opkg 源里，overlay 重建就会消失，所以每次恢复都要显式装一遍。
+  # 失败不阻断整条流水线：外网/Docker/1Panel 已经可用。
+  if ! skip_has ocspeed; then
+    run kp-ocspeed.sh || echo "  ! ocspeed 未装上（不影响其它组件，可单独重跑：SCRIPT=kp-ocspeed.sh）"
+  fi
 else
   # ---------- 存储未就绪：重建 → 重启 → 自动续跑 ----------
   echo "  ! 存储未就绪（TF 卡还没分区 / 没挂载）"

@@ -1,0 +1,25 @@
+<%+header%>
+<div class="ocspeed-body">
+<style>
+.nt-wrap{max-width:720px;margin:24px auto;padding:0 16px}
+.nt-title{font-size:18px;font-weight:700;color:#0f172a;margin-bottom:4px}
+.nt-sub{font-size:13px;color:#64748b;margin-bottom:18px;word-break:break-all}
+table.nt{border-collapse:collapse;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+table.nt th{background:#f8fafc;text-align:left;padding:10px 14px;font-size:13px;color:#475569;border-bottom:1px solid #e2e8f0}
+table.nt td{padding:9px 14px;font-size:14px;border-bottom:1px solid #f1f5f9}
+table.nt tr:last-child td{border-bottom:none}
+.nt-empty{padding:22px;text-align:center;color:#94a3b8;font-size:14px}
+.nt-back{display:inline-block;margin-top:18px;padding:8px 18px;border-radius:8px;background:#0284c7;color:#fff;text-decoration:none;font-size:14px}
+</style>
+<div class="nt-wrap">
+  <div class="nt-title">单节点测速</div>
+  <div class="nt-sub">节点：<%=node_html%></div>
+  <% if results_rows and results_rows ~= "" then %>
+  <table class="nt"><tr><th>测试站点</th><th>延迟</th></tr><%=results_rows%></table>
+  <% else %>
+  <div class="nt-empty">暂无测速结果。</div>
+  <% end %>
+  <a class="nt-back" href="<%=luci.dispatcher.build_url('admin','services','openclash','ocspeed')%>">返回自动测速</a>
+</div>
+</div>
+<%+footer%>

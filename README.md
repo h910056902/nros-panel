@@ -68,7 +68,13 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 | `PANEL_PORT` | `10090` | 1Panel 端口（10086/87/88 已被固件占用） |
 | `PANEL_USER` / `PANEL_PASS` / `PANEL_ENT` | `admin` / 随机 / 随机 | 面板账号、密码、入口路径 |
 | `PANEL_DIR` | `/mnt/storage/data` | 数据根目录（放 p2 大分区，不吃 overlay） |
-| `SKIP` | 空 | 逗号分隔要跳过的阶段：`oc,docker,panel` |
+| `SKIP` | 空 | 逗号分隔要跳过的阶段：`oc,docker,panel,ocspeed` |
+| `DOCKER_MIRRORS` | `docker.1ms.run` `docker.m.daocloud.io` | 镜像加速站（空格分隔）。拉不动时会逐个单独试，把能用的那个留在 UCI 里 |
+| `DOCKER_SMOKE` | `1` | `1` = 真拉 `hello-world` 并跑一次（host 网络）验证运行时；`0` = 只查 `docker info`（省时间） |
+| `OCS_GROUP` | 配置原值 | 自动测速的目标策略组（如 `宝贝云`），缺省沿用已有配置 |
+| `OCS_INTERVAL` | `30` | 自动测速间隔（分钟） |
+| `OCS_ENABLE` | `1` | `1` = 装好即启用并写 cron；`0` = 只装不启用 |
+| `OCS_RUN` | `0` | `1` = 装好后立刻跑一次测速（约 2 分钟） |
 | `REBUILD` | `0` | `1` = 强制走重建流程（存储正常也重建），自动蕴含 `FORCE=1` |
 | `FORCE` | `0` | `1` = 卡上确实有数据也要重建（放行 kp-storage-init 的安全闸） |
 | `NO_REBOOT` | `0` | `1` = 做完不自动重启，便于先核对卡上内容再手动 `reboot` |
@@ -83,10 +89,77 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 | `install.sh` | **入口**。引导器 + 流程编排：判断存储状态、迁移 overlay 内容、预置续跑钩子、决定是否重启 |
 | `kp-ui.sh` | **终端界面库**。所有输出格式都在这里，改界面只改它 |
 | `kp-install.sh` | **主脚本**。四阶段：预检换源 → OpenClash → Docker → 1Panel |
+| `kp-store-lib.sh` | **商店注册共享库**。`register_store` / `store_verify` / 占位包 / 承载页 / 路由补丁，`kp-install.sh` 与 `kp-ocspeed.sh` 共用一份 |
+| `kp-store-check.sh` | **注册体检**。逐项核对 1Panel / OpenClash / ocspeed 在商店里的注册、已安装判定与「打开」按钮 |
+| `ocspeed/` | ocspeed 的源码五件套。它不在任何 opkg 源里，只能从仓库拉 |
+| `kp-ocspeed.sh` | **自动测速插件**。OpenClash 之上自建的 ocspeed：全量测延迟 + 自动切最优节点 + LuCI 页面 + 商店注册 |
 | `kp-storage-init.sh` | **存储初始化**。TF 卡双分区 + f2fs（官方卷标）+ 写 fstab |
 | `kp-ui-preview.sh` | **界面预览**。本地跑一遍所有 UI 元素，不用上设备（开发用） |
 
 改界面、改参数、改流程逻辑，各改各的文件，互不影响。
+
+### 单独恢复 ocspeed（自动测速）
+
+ocspeed **不在任何 opkg 源里**，它跟着 overlay 走 —— 重建 TF 卡、换卡、扩容（`REBUILD=1`）
+之后 `/usr/libexec/openclash-helper/`、`/usr/lib/lua/luci/controller/ocspeed.lua`、
+`/etc/config/ocspeed` 会一起消失，而且没有 opkg 能装回来（2026-09-16 实测踩过）。
+
+```sh
+# 单独装回来（幂等，保留已有配置值）
+SCRIPT=kp-ocspeed.sh sh /tmp/kp.sh
+
+# 指定目标策略组，并装好后立刻测一次
+OCS_GROUP=宝贝云 OCS_RUN=1 SCRIPT=kp-ocspeed.sh sh /tmp/kp.sh
+```
+
+装好后入口：**服务 → OpenClash → 自动测速**。
+它靠 3 条 cron 干活（自动测速 / 故障切换 / 备用节点预选），由脚本的 `enable`/`disable`
+统一维护 —— 别手工改 `/etc/crontabs/root`，改了下次启用会被重建覆盖。
+源码另有一份躺在数据盘 `/mnt/storage/data/ocspeed-backup/`，真断网时也能原地 `cp` 回来。
+
+### 注册进鲲鹏商店（原生面板 → 应用中心）
+
+三个应用都会注册进去：**1Panel / OpenClash / ocspeed**。实现统一在 `kp-store-lib.sh`，
+谁要注册谁 source 它 —— 之前写在 `kp-install.sh` 里，ocspeed 要用就必然复制出第二份。
+
+真实机制（逆向确认，别照着界面猜）：
+
+| 环节 | 判据 | 坑 |
+|---|---|---|
+| 应用目录 | `/etc/config/appcenter` + `ubus call appcenter list` | 注册后要 `appcenter restart` 才生效 |
+| 「已安装」 | 守护进程实时跑 `opkg info` | 非 opkg 安装的应用（1Panel、ocspeed）**必须造占位包**，否则永远显示未安装 |
+| 「打开」 | iframe 加载 `luci_module_route` | 守护进程**只给远程目录的应用下发这个字段**，UCI 里手写会被重写丢弃 → 本地路由放 `/etc/kp_store/routes.list`，由 Lua 覆盖函数注入 |
+| 页面可达 | HTTP 200/403 | 未登录 403 是正常的（LuCI 保护），404 才是真没有 |
+
+体检（随时可跑，只读不改动）：
+
+```sh
+SCRIPT=kp-store-check.sh sh /tmp/kp.sh
+```
+
+输出示例 —— 每一项都能定位到具体环节，不用肉眼猜按钮为什么空白：
+
+```
+---------------- ocspeed ----------------
+  ✓ ocspeed：商店目录已注册
+  ✓ ocspeed：opkg 认账（3.3）→ 商店显示已安装
+  ✓ ocspeed：本地路由 admin/services/openclash/ocspeed
+  ✓ ocspeed：商店列表已打路由补丁
+  ✓ ocspeed：页面可达（HTTP 403）
+```
+
+### Docker 的两个本机硬约束
+
+1. **没有 veth**（厂商内核没编译，`kmod-veth` 是空包）。默认桥接网络会在建 veth pair 时
+   直接失败：`operation not supported` —— 这是内核能力缺失，改 `daemon.json` 也没用。
+   **容器一律加 `--network host`**，脚本的冒烟测试就是这么跑的。
+2. **配置只认 UCI**。固件 `/etc/init.d/dockerd` 把 `/etc/config/dockerd` 渲染成
+   `/tmp/dockerd/daemon.json`，你写 `/etc/docker/daemon.json` 根本没人读
+   （实测那样跑出来 Root Dir 还是默认的 `/opt/docker`、驱动退化成 vfs）。
+
+Docker 阶段做的优化：数据目录预建（提前暴露「p2 没挂」）、**无条件 enable 自启**
+（只判 `docker info` 会漏掉已在跑但没开自启的情况）、拉镜像冒烟（拉不动就逐个
+加速镜像重试，把能用的写回 UCI）、无 veth 时提前警告。
 
 ---
 

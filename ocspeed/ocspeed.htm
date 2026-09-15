@@ -1,0 +1,2769 @@
+<%+header%>
+
+<div class="ocspeed-body">
+<style>
+/* ==========================================================================
+   Modern Network Control Dashboard - Clean Engineering Aesthetic (No AI Slop)
+   ========================================================================== */
+:root {
+  --bg-canvas: transparent;
+  --bg-card: #ffffff;
+  --bg-subtle: #f8fafc;
+  --bg-muted: #f1f5f9;
+  
+  --border-light: #e2e8f0;
+  --border-subtle: #edf2f7;
+  --border-focus: #0284c7;
+  
+  --text-main: #0f172a;
+  --text-body: #334155;
+  --text-muted: #64748b;
+  --text-sub: #94a3b8;
+  
+  --brand-primary: #0284c7;
+  --brand-hover: #0369a1;
+  --brand-active: #075985;
+  --brand-light: #f0f9ff;
+  --brand-ring: rgba(2, 132, 199, 0.18);
+  
+  --status-ok: #059669;
+  --status-ok-bg: #ecfdf5;
+  --status-ok-border: #a7f3d0;
+  
+  --status-warn: #d97706;
+  --status-warn-bg: #fffbeb;
+  --status-warn-border: #fde68a;
+  
+  --status-bad: #dc2626;
+  --status-bad-bg: #fef2f2;
+  --status-bad-border: #fecaca;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+.ocspeed-body {
+  background: var(--bg-canvas);
+  color: var(--text-body);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  padding: 16px 20px;
+  max-width: 1160px;
+  margin: 0 auto;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- 顶部导航栏 ---- */
+.ocspeed-body header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ocspeed-body .title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ocspeed-body .title-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--brand-primary);
+  flex-shrink: 0;
+}
+
+.ocspeed-body h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ocspeed-body .ver {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  background: var(--brand-light);
+  border: 1px solid #bae6fd;
+  padding: 1px 7px;
+  border-radius: 999px;
+  letter-spacing: 0;
+}
+
+.ocspeed-body .live {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+}
+
+.ocspeed-body .live .ld {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  animation: liveBlink 2.4s ease-in-out infinite;
+}
+
+@keyframes liveBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.9); }
+}
+
+.ocspeed-body .pill {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  transition: all 0.2s;
+}
+
+.ocspeed-body .pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-sub);
+}
+
+.ocspeed-body .pill.idle {
+  color: var(--text-muted);
+}
+
+.ocspeed-body .pill.run {
+  color: var(--status-ok);
+  background: var(--status-ok-bg);
+  border-color: var(--status-ok-border);
+}
+
+.ocspeed-body .pill.run .dot {
+  background: var(--status-ok);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2);
+}
+
+/* 现代化开关 Toggle Switch */
+.ocspeed-body .sw {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--bg-card);
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+}
+
+.ocspeed-body .toggle-track {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background: #cbd5e1;
+  border-radius: 999px;
+  transition: background 0.2s ease;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.ocspeed-body .toggle-track:after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ocspeed-body .sw input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+
+.ocspeed-body .sw input:checked + .toggle-track {
+  background: var(--brand-primary);
+}
+
+.ocspeed-body .sw input:checked + .toggle-track:after {
+  transform: translateX(14px);
+}
+
+.ocspeed-body .spacer { flex: 1; }
+
+.ocspeed-body .scale {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.ocspeed-body .scale i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.ocspeed-body .scale i.g { background: var(--status-ok); }
+.ocspeed-body .scale i.y { background: var(--status-warn); }
+.ocspeed-body .scale i.r { background: var(--status-bad); }
+
+/* ---- 指标卡片 (Metrics Grid) ---- */
+.ocspeed-body .cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.ocspeed-body .card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ocspeed-body .card:hover {
+  border-color: #cbd5e1;
+}
+
+.ocspeed-body .card.p0 {
+  border-left: 3px solid var(--brand-primary);
+}
+
+.ocspeed-body .card .k {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ocspeed-body .card .v {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+  word-break: break-all;
+  line-height: 1.45;
+}
+
+.ocspeed-body .card.p0 .v {
+  font-size: 16px;
+}
+
+.ocspeed-body .card .big {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-main);
+}
+
+.ocspeed-body .card.hl-ok .big { color: var(--status-ok); }
+.ocspeed-body .card.hl-warn .big { color: var(--status-warn); }
+.ocspeed-body .card.hl-bad .big { color: var(--status-bad); }
+
+.ocspeed-body .card .sub {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ocspeed-body .card .sub b {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.ocspeed-body .card .sub .ok {
+  color: var(--status-ok);
+  background: var(--status-ok-bg);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+}
+
+.ocspeed-body .card .sub .muted {
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+}
+
+.ocspeed-body .card.flash {
+  animation: cardFlash 0.6s ease-out;
+}
+@keyframes cardFlash {
+  0% { background: #f0fdf4; }
+  100% { background: var(--bg-card); }
+}
+
+/* 备用节点卡 */
+.ocspeed-body .card.wide-card {
+  grid-column: span 2;
+}
+
+.ocspeed-body .card.wide-card .k {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ocspeed-body .card.wide-card .k .bk-tag {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+
+.ocspeed-body .card.wide-card .k button {
+  margin-left: auto;
+}
+
+.ocspeed-body .bk-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ocspeed-body .bk-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px 5px 6px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.ocspeed-body .bk-item:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.ocspeed-body .bk-item i {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--brand-primary);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.ocspeed-body .bk-item.r2 i, .ocspeed-body .bk-item.r3 i {
+  background: #64748b;
+}
+
+.ocspeed-body .bk-item .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.ocspeed-body .bk-item b {
+  flex: 0 0 auto;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-weight: 600;
+}
+
+.ocspeed-body .bk-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---- 面板 (Panels) ---- */
+.ocspeed-body .panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.ocspeed-body .ph {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.ocspeed-body .ph b {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+/* ---- 按钮规范 ---- */
+.ocspeed-body button {
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.ocspeed-body button:hover {
+  background: var(--bg-subtle);
+  border-color: #cbd5e1;
+}
+
+.ocspeed-body button:active {
+  transform: translateY(1px);
+}
+
+.ocspeed-body button.primary {
+  background: var(--brand-primary);
+  border: 1px solid var(--brand-primary);
+  color: #ffffff;
+}
+
+.ocspeed-body button.primary:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+  color: #ffffff;
+}
+
+.ocspeed-body button.mini {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.ocspeed-body button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 过滤选项卡 (Segmented Pills) */
+.ocspeed-body .fbtn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ocspeed-body .fbtn:hover {
+  color: var(--text-main);
+  background: var(--bg-muted);
+}
+
+.ocspeed-body .fbtn.active {
+  background: var(--text-main);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ocspeed-body a.fbtn {
+  display: inline-block;
+}
+
+/* 表格与数据展示 */
+.ocspeed-body .tw {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.ocspeed-body .tw.scroll {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.ocspeed-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #ffffff;
+}
+
+.ocspeed-body th, .ocspeed-body td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.ocspeed-body th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11.5px;
+  background: var(--bg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+.ocspeed-body .tw.scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--border-light);
+}
+
+.ocspeed-body th[data-sort] {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ocspeed-body th[data-sort]:hover {
+  color: var(--brand-primary);
+}
+
+.ocspeed-body th[data-sort]:after {
+  content: " \2195";
+  opacity: 0.35;
+  font-size: 11px;
+}
+.ocspeed-body th[data-dir="asc"]:after {
+  content: " \2191";
+  opacity: 1;
+  color: var(--brand-primary);
+}
+.ocspeed-body th[data-dir="desc"]:after {
+  content: " \2193";
+  opacity: 1;
+  color: var(--brand-primary);
+}
+
+.ocspeed-body .node-row {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.ocspeed-body .node-row:hover td {
+  background: #f1f8fe;
+}
+
+.ocspeed-body .node-row.junk {
+  opacity: 0.45;
+}
+
+.ocspeed-body .node-row.junk:hover {
+  opacity: 0.85;
+}
+
+/* 延迟条 */
+.ocspeed-body td.d {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+
+.ocspeed-body .dv {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 80px;
+  padding: 2px 0;
+}
+
+.ocspeed-body .dvbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  opacity: 0.15;
+}
+.ocspeed-body .dvbar.g { background: var(--status-ok); }
+.ocspeed-body .dvbar.y { background: var(--status-warn); }
+.ocspeed-body .dvbar.r { background: var(--status-bad); }
+.ocspeed-body .dvbar.x { background: var(--status-bad); opacity: 0.08; }
+
+.ocspeed-body .dvt {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 节点名标签 (Clean Tag Chips) */
+.ocspeed-body .chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  padding: 1px 7px;
+  margin: 1px 4px 1px 0;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.chip.ln { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.chip.rg-xx { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.chip.rg-sg { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.chip.rg-jp { background: #fdf2f8; color: #9d174d; border-color: #fbcfe8; }
+.chip.rg-us { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
+.chip.rg-hk, .chip.rg-tw { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+.chip.rg-kr { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; }
+.chip.rg-ru { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.chip.rg-eu { background: #f0fdfa; color: #115e59; border-color: #99f6e4; }
+.chip.rg-cn { background: #fff1f2; color: #9f1239; border-color: #fecdd3; }
+.chip.relay { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+.chip.direct { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.chip.media { background: #faf5ff; color: #6b21a8; border-color: #e9d5ff; }
+.chip.mul { background: #f8fafc; color: #334155; border-color: #cbd5e1; }
+.chip.feat { background: #fdf4ff; color: #86198f; border-color: #f5d0fe; }
+
+/* 搜索框 */
+.ocspeed-body .searchbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.ocspeed-body .searchbox input {
+  width: 180px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 5px 10px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.ocspeed-body .searchbox input:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+
+/* 进度条 (Progress Tracker) */
+.ocspeed-body .pb {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+/* 进度条头部：脉冲状态点 + 消息 + 计时 + 百分比 */
+.ocspeed-body .pb-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+.ocspeed-body .pb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  animation: pbDotPulse 1.6s ease-out infinite;
+  flex-shrink: 0;
+}
+.ocspeed-body .pb.done .pb-dot {
+  background: var(--status-ok);
+  animation: none;
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.45);
+}
+.ocspeed-body .pb.stall .pb-dot {
+  background: var(--status-warn);
+  animation-duration: 3s;
+}
+@keyframes pbDotPulse {
+  0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.35); }
+  70% { box-shadow: 0 0 0 7px rgba(2, 132, 199, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
+}
+
+.ocspeed-body .pb-spacer { flex: 1; }
+.ocspeed-body .pb-el {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ocspeed-body .pb-pct {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  min-width: 52px;
+  text-align: right;
+  color: var(--brand-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+
+/* 轨道：10px + 内阴影；末端滑块圆点 */
+.ocspeed-body .pb-track {
+  position: relative;
+  background: var(--bg-muted);
+  border-radius: 999px;
+  height: 10px;
+  overflow: visible;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.10);
+}
+
+.ocspeed-body .pb-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0369a1, var(--brand-primary) 55%, #22b8cf);
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.35);
+}
+
+.ocspeed-body #pbarKnob {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--brand-primary);
+  box-shadow: 0 1px 5px rgba(2, 132, 199, 0.45);
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+.ocspeed-body .pb.done .pb-fill {
+  background: linear-gradient(90deg, #15803d, var(--status-ok));
+  box-shadow: 0 0 10px rgba(22, 163, 74, 0.30);
+}
+
+.ocspeed-body .pb.done #pbarKnob {
+  border-color: var(--status-ok);
+  box-shadow: 0 1px 5px rgba(22, 163, 74, 0.45);
+}
+
+.ocspeed-body .pb.done .pb-pct {
+  color: var(--status-ok);
+}
+
+.ocspeed-body .pb.stall .pb-pct {
+  color: var(--status-warn);
+}
+
+/* 五阶段步骤条：圆点 + 连线 */
+.ocspeed-body .pb-stages {
+  display: flex;
+  margin-top: 14px;
+  position: relative;
+}
+
+.ocspeed-body .pb-stages .st {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  padding: 18px 4px 2px;
+  transition: color 0.2s ease;
+}
+
+.ocspeed-body .pb-stages .st::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px solid var(--border-light);
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  z-index: 1;
+}
+
+.ocspeed-body .pb-stages .st::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: calc(50% + 9px);
+  right: calc(-50% + 9px);
+  height: 2px;
+  background: var(--border-light);
+  border-radius: 2px;
+}
+
+.ocspeed-body .pb-stages .st:last-child::after { display: none; }
+
+.ocspeed-body .pb-stages .st.done {
+  color: var(--status-ok);
+}
+.ocspeed-body .pb-stages .st.done::before {
+  background: var(--status-ok);
+  border-color: var(--status-ok);
+  box-shadow: inset 0 0 0 2px var(--bg-card);
+}
+.ocspeed-body .pb-stages .st.done::after {
+  background: var(--status-ok);
+  opacity: 0.45;
+}
+
+.ocspeed-body .pb-stages .st.active {
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+.ocspeed-body .pb-stages .st.active::before {
+  border-color: var(--brand-primary);
+  background: var(--brand-light);
+  animation: stPulse 1.6s ease-out infinite;
+}
+@keyframes stPulse {
+  0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.30); }
+  70% { box-shadow: 0 0 0 7px rgba(2, 132, 199, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
+}
+
+/* 横幅 (Banners) */
+.ocspeed-body .banner {
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid transparent;
+}
+
+.ocspeed-body .banner.ok {
+  background: var(--status-ok-bg);
+  border-color: var(--status-ok-border);
+  color: #065f46;
+}
+
+.ocspeed-body .banner.info {
+  background: var(--brand-light);
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+.ocspeed-body .banner.warn {
+  background: var(--status-warn-bg);
+  border-color: var(--status-warn-border);
+  color: #92400e;
+}
+
+.ocspeed-body .banner.err {
+  background: var(--status-bad-bg);
+  border-color: var(--status-bad-border);
+  color: #991b1b;
+}
+
+.ocspeed-body .banner .bsub {
+  opacity: 0.85;
+  font-size: 12px;
+}
+
+.ocspeed-body .banner .bx {
+  margin-left: auto;
+  cursor: pointer;
+  opacity: 0.55;
+  font-size: 16px;
+  line-height: 1;
+}
+.ocspeed-body .banner .bx:hover { opacity: 1; }
+
+/* 设置 (Details Form) */
+.ocspeed-body details.cfg {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.ocspeed-body details.cfg summary {
+  cursor: pointer;
+  padding: 14px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+
+.ocspeed-body details.cfg summary::-webkit-details-marker { display: none; }
+
+.ocspeed-body details.cfg summary:before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--brand-primary);
+  border-bottom: 2px solid var(--brand-primary);
+  transform: rotate(-45deg);
+  transition: transform 0.2s;
+  margin-right: 2px;
+}
+
+.ocspeed-body details.cfg[open] summary:before {
+  transform: rotate(45deg);
+}
+
+.ocspeed-body details.cfg .form {
+  padding: 4px 18px 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ocspeed-body .form label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ocspeed-body .form label.wide {
+  grid-column: 1 / -1;
+}
+
+.ocspeed-body .form input, .ocspeed-body .form textarea {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.ocspeed-body .form textarea {
+  resize: vertical;
+  min-height: 56px;
+  line-height: 1.5;
+}
+
+.ocspeed-body .form input:focus, .ocspeed-body .form textarea:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+
+.ocspeed-body .form label.chk {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-main);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ocspeed-body .form label.chk input {
+  width: auto;
+  accent-color: var(--brand-primary);
+  margin: 0;
+}
+
+.ocspeed-body .hint {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-top: 1px;
+}
+
+.ocspeed-body .subhead {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  border-bottom: 1px dashed var(--border-light);
+  padding-bottom: 6px;
+  margin-top: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ocspeed-body .cfgact {
+  padding: 0 18px 18px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* 终端/日志 (Console Log) */
+.ocspeed-body pre {
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 11.5px;
+  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  color: #cbd5e1;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.ocspeed-body pre::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.ocspeed-body pre::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 999px;
+}
+
+.ocspeed-body .lgd {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ocspeed-body .lgd i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.ocspeed-body .lgd i.g { background: #10b981; }
+.ocspeed-body .lgd i.y { background: #f59e0b; }
+.ocspeed-body .lgd i.r { background: #ef4444; }
+.ocspeed-body .lgd i.c { background: #38bdf8; }
+.ocspeed-body .lgd i.v { background: #a855f7; }
+
+.ocspeed-body .empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ocspeed-body .muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* 响应式调整 */
+@media (max-width: 760px) {
+  .ocspeed-body .cards { grid-template-columns: 1fr; }
+  .ocspeed-body .card.wide-card { grid-column: 1; }
+  .ocspeed-body header { gap: 8px; }
+  .ocspeed-body .searchbox { width: 100%; margin-left: 0; }
+  .ocspeed-body .searchbox input { width: 100%; }
+}
+
+/* ========== 趋势图面板 ========== */
+.ocspeed-body .chart-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+.ocspeed-body .chart-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+.ocspeed-body .chart-legend {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.ocspeed-body .chart-legend .lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+  transition: background 0.18s ease, opacity 0.18s ease, border-color 0.18s ease;
+}
+.ocspeed-body .chart-legend .lg:hover {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: var(--border-light);
+}
+.ocspeed-body .chart-legend .lg.off { opacity: 0.32; }
+.ocspeed-body .chart-legend .lg.off i { background: var(--text-muted) !important; }
+.ocspeed-body .chart-legend .lg[hidden] { display: none; }
+.ocspeed-body .chart-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.ocspeed-body .chart-body { position: relative; }
+.ocspeed-body .chart-canvas {
+  width: 100%;
+  height: 220px;
+  display: block;
+  cursor: crosshair;
+}
+.ocspeed-body .chart-empty {
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.ocspeed-body .chart-tip {
+  position: absolute;
+  z-index: 5;
+  display: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.93);
+  color: #e2e8f0;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+  transform: translate(-50%, -100%);
+}
+.ocspeed-body .chart-tip .tip-t {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.65;
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+.ocspeed-body .chart-tip .tip-r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ocspeed-body .chart-tip .tip-r i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.ocspeed-body .chart-tip .tip-r em {
+  font-style: normal;
+  opacity: 0.85;
+}
+.ocspeed-body .chart-tip .tip-r b {
+  margin-left: auto;
+  padding-left: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* ========== 进度条流光（完成态自动停止） ========== */
+.ocspeed-body .pb-fill {
+  position: relative;
+  overflow: hidden;
+}
+.ocspeed-body .pb.done .pb-fill::after { display: none; }
+.ocspeed-body .pb-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* ========== 卡片脉冲（测速中） ========== */
+.ocspeed-body .card.pulsing {
+  animation: cardPulse 1.6s ease-in-out infinite;
+}
+@keyframes cardPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); border-color: var(--border-light); }
+  50% { box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.12); border-color: rgba(2, 132, 199, 0.4); }
+}
+
+/* ========== 数字滚动容器 ========== */
+.ocspeed-body .roll-num {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+}
+
+/* ========== 表格行 stagger 入场（作用于 td + 纯 opacity，transform 碰 tr 会错位）========== */
+.ocspeed-body .tw tbody td {
+  animation: rowIn 0.35s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.ocspeed-body .tw tbody tr:nth-child(1) td { animation-delay: 0.00s; }
+.ocspeed-body .tw tbody tr:nth-child(2) td { animation-delay: 0.03s; }
+.ocspeed-body .tw tbody tr:nth-child(3) td { animation-delay: 0.06s; }
+.ocspeed-body .tw tbody tr:nth-child(4) td { animation-delay: 0.09s; }
+.ocspeed-body .tw tbody tr:nth-child(5) td { animation-delay: 0.12s; }
+.ocspeed-body .tw tbody tr:nth-child(6) td { animation-delay: 0.15s; }
+.ocspeed-body .tw tbody tr:nth-child(7) td { animation-delay: 0.18s; }
+.ocspeed-body .tw tbody tr:nth-child(8) td { animation-delay: 0.21s; }
+.ocspeed-body .tw tbody tr:nth-child(9) td { animation-delay: 0.24s; }
+.ocspeed-body .tw tbody tr:nth-child(10) td { animation-delay: 0.27s; }
+@keyframes rowIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ========== 节点行 hover（背景色过渡，不用绝对定位）========== */
+.ocspeed-body .node-row td {
+  transition: background 0.25s ease;
+}
+
+/* ========== 呼吸徽章 ========== */
+.ocspeed-body .pill.run {
+  animation: breathe 2s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.15); }
+  50% { box-shadow: 0 0 0 5px rgba(5, 150, 105, 0); }
+}
+
+/* ========== 切换过渡色 ========== */
+.ocspeed-body .card.hl-ok,
+.ocspeed-body .card.hl-warn,
+.ocspeed-body .card.hl-bad {
+  transition: border-left-color 0.5s ease, box-shadow 0.5s ease;
+}
+
+/* ========== 测速按钮点击涟漪 ========== */
+.ocspeed-body button.primary {
+  position: relative;
+  overflow: hidden;
+}
+.ocspeed-body button.primary::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  background: rgba(255,255,255,0.25);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.4s, height 0.4s;
+}
+.ocspeed-body button.primary:active::after {
+  width: 200px; height: 200px;
+}
+
+
+/* ========== 节点 chip 容器（修复错位）========== */
+.ocspeed-body .chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 4px;
+  min-width: 0;
+  line-height: 1.5;
+}
+/* chip 间距交给容器 gap，去掉自带 margin 防叠加 */
+.ocspeed-body .chips .chip {
+  margin: 0;
+  flex-shrink: 0;
+}
+/* 卡片内的节点名同样处理 */
+.ocspeed-body .card .v.c-node {
+  line-height: 1.6;
+}
+
+</style>
+
+<div id="err" style="display:none;background:var(--status-bad-bg);border:1px solid var(--status-bad-border);color:var(--status-bad);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:14px;font-size:13px"></div>
+
+<header>
+  <div class="title-group">
+    <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+      <circle cx="12" cy="12" r="4"/>
+    </svg>
+    <h1>OpenClash 自动测速切换<span class="ver" title="页面部署时间；若刷新后时间不变，说明浏览器用了缓存">v2 · <%=ver%></span></h1>
+  </div>
+  
+  <span class="live"><span class="ld"></span><span id="liveLabel">实时</span></span>
+  <span id="pill" class="pill idle"><span class="dot"></span><span class="pl">空闲</span></span>
+  
+  <label class="sw">
+    <input type="checkbox" id="autoToggle"<%=auto_checked%>>
+    <span class="toggle-track"></span>
+    <span>自动测速</span>
+  </label>
+  
+  <span class="muted" id="intvLabel"><%=intv%></span>
+  <span class="muted" id="foInfo" style="color:var(--status-warn)"><%=fo_info%></span>
+  
+  <span class="spacer"></span>
+  <span class="scale">延迟<i class="g"></i>&lt;500<i class="y"></i>&lt;1000<i class="r"></i>≥1000 ms</span>
+</header>
+
+<div id="runBanner" class="banner" style="display:none"></div>
+
+<div id="pbarWrap" class="pb" style="display:none">
+  <div class="pb-head">
+    <span class="pb-dot"></span>
+    <span id="pbarMsg">空闲</span>
+    <span class="pb-spacer"></span>
+    <span id="pbarElapsed" class="pb-el"></span>
+    <span id="pbarPct" class="pb-pct">0%</span>
+  </div>
+  <div class="pb-track"><div id="pbarFill" class="pb-fill"></div><i id="pbarKnob"></i></div>
+  <div class="pb-stages" id="pbarStages">
+    <span class="st">收集</span><span class="st">全量测速</span><span class="st">分类测速</span><span class="st">切换</span><span class="st">完成</span>
+  </div>
+</div>
+
+<section class="cards">
+  <div class="card p0">
+    <div class="k"><span>当前节点</span><span class="muted">ACTIVE</span></div>
+    <div class="v c-node" id="cur"><%=cur%></div>
+    <div class="sub">上次切换 <b id="swinfo" class="ok"><%=swinfo%></b></div>
+  </div>
+  
+  <div class="card">
+    <div class="k"><span>最快节点</span><span class="muted">FASTEST</span></div>
+    <div class="v c-node" id="best"><%=best%></div>
+  </div>
+  
+  <div class="card" id="bestdCard">
+    <div class="k"><span>最快延迟</span><span class="muted">LATENCY</span></div>
+    <div class="big" id="bestd"><%=bestd%></div>
+  </div>
+  
+  <div class="card">
+    <div class="k"><span>候选节点</span><span class="muted">CANDIDATES</span></div>
+    <div class="big" id="cands"><%=cands%></div>
+  </div>
+  
+  <div class="card wide-card" id="backupCard">
+    <div class="k">
+      <span>备用节点</span>
+      <span class="bk-tag" id="bkTag">每 <%=f_backup_interval%> 分钟预选</span>
+      <button id="btnBackup" class="mini">立即预选</button>
+    </div>
+    <div class="bk-list" id="backupList"><%=backup_html%></div>
+    <div class="sub" id="backupSub"><%=backup_sub%></div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="ph">
+    <b>节点排行（初赛排名 · 决赛仅作可用性筛选）</b>
+    <button id="btnTest">仅测速</button>
+    <button id="btnRun" class="primary">测速并切换</button>
+  </div>
+  <div class="tw" id="topBox">
+  <table id="topTable">
+    <thead><tr><th data-sort="num" style="width:50px">#</th><th data-sort="str">节点</th><th data-sort="num" style="width:130px">延迟</th></tr></thead>
+    <tbody><%=top_table%></tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="ph">
+    <b>订阅节点测速（全部节点）</b>
+    <span class="muted" id="nodesSummary"><%=nodes_sum%></span>
+    <span class="searchbox">
+      <input id="nodeSearch" type="search" placeholder="搜索节点名…" autocomplete="off">
+      <span class="muted" id="searchCount"></span>
+    </span>
+  </div>
+  <div class="ph" style="margin-top:0">
+    <a class="fbtn<%=filt_all%>" href="?filter=all">全部</a>
+    <a class="fbtn<%=filt_ok%>" href="?filter=ok">可用</a>
+    <a class="fbtn<%=filt_dead%>" href="?filter=dead">失效</a>
+    <a class="fbtn<%=filt_fake%>" href="?filter=fake">假节点</a>
+    <span class="muted" id="nodesTime"><%=tsh%></span>
+  </div>
+  <div class="tw scroll" id="nodesBox">
+  <table id="nodesTable">
+    <thead><tr><th data-sort="str">节点</th><th data-sort="str" style="width:96px">类型</th><th data-sort="num" style="width:124px">延迟</th><th data-sort="str" style="width:96px">状态</th></tr></thead>
+    <tbody><%=nodes_rows%></tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="ph"><b>分类测速（视频/流媒体/AI）</b><span class="muted">Top 5 节点 × 各网站延迟</span></div>
+  <div class="tw" id="sitesBox"><%=sites_table%></div>
+</section>
+
+
+<section class="panel chart-wrap" id="trendPanel">
+  <div class="chart-head">
+    <b>延迟趋势</b>
+    <span class="muted">最近 10 轮测速</span>
+    <span class="chart-legend" id="trendLegend">
+      <span class="lg" data-key="best" title="本轮最慢节点延迟（越低越好）"><i style="background:#059669"></i>最优延迟</span>
+      <span class="lg" data-key="final" title="整轮决赛总耗时，量纲与节点延迟不同，默认隐藏"><i style="background:#f59e0b"></i>决赛耗时</span>
+      <span class="lg" data-key="ok" title="通过初赛的节点数量（右轴）"><i style="background:#0284c7"></i>可用节点</span>
+    </span>
+  </div>
+  <div class="chart-body" id="chartBody">
+    <canvas id="trendCanvas" class="chart-canvas"></canvas>
+    <div class="chart-tip" id="trendTip"></div>
+  </div>
+  <div class="chart-empty" id="trendEmpty" style="display:none">暂无足够历史数据</div>
+</section>
+
+<section class="panel">
+  <div class="ph"><b>历史记录</b><span class="muted">最近 10 轮</span></div>
+  <div class="tw" id="hist"><div class="empty"><div>加载中…</div></div></div>
+</section>
+
+<details class="cfg" id="cfgBox">
+  <summary>设置<span class="muted" style="margin-left:auto;font-weight:400">17 项 · 故障转移已<%=fo_checked:find("checked") and "启用" or "停用"%> · 备用节点<%=bk_checked:find("checked") and "已启用" or "已停用"%></span></summary>
+  <div class="form">
+    <div class="subhead">基础配置</div>
+    <label>间隔（分钟）<input id="f_interval" type="number" min="5" max="1440" value="<%=f_interval%>"></label>
+    <label>切换阈值（ms）<input id="f_threshold" type="number" min="0" value="<%=f_threshold%>">
+      <span class="hint">最快节点优于当前节点多少才切换</span></label>
+    <label>目标策略组<input id="f_group" value="<%=f_group%>"></label>
+    <label>单节点超时（ms）<input id="f_timeout" type="number" min="500" value="<%=f_timeout%>"></label>
+
+    <div class="subhead">测速地址</div>
+    <label>初赛测速 URL<input id="f_test_url" value="<%=f_test_url%>"></label>
+    <label>决赛（Gemini）URL<input id="f_gemini_url" value="<%=f_gemini_url%>"></label>
+    <label class="wide">分类测速站点（竖线 | 分隔）
+      <textarea id="f_sites" rows="2"><%=f_sites%></textarea></label>
+    <label class="wide">单节点测速站点（竖线 | 分隔）
+      <textarea id="f_testsites" rows="3"><%=f_testsites%></textarea></label>
+    <label class="wide">排除关键词（空格分隔）
+      <textarea id="f_exclude" rows="2"><%=f_exclude%></textarea>
+      <span class="hint">节点名含这些词的将被判定为假节点</span></label>
+
+    <div class="subhead">故障转移</div>
+    <label class="chk"><input type="checkbox" id="f_failover_enable"<%=fo_checked%>> 启用故障转移</label>
+    <label>延迟阈值（ms）<input id="f_fo_threshold" type="number" min="0" value="<%=f_fo_threshold%>">
+      <span class="hint">当前节点超过此值即触发切换</span></label>
+    <label>冷却时间（秒）<input id="f_fo_cooldown" type="number" min="0" value="<%=f_fo_cooldown%>">
+      <span class="hint">两次转移之间的最小间隔</span></label>
+
+    <div class="subhead">备用节点</div>
+    <label class="chk"><input type="checkbox" id="f_backup_enable"<%=bk_checked%>> 启用备用节点预选</label>
+    <label>预选间隔（分钟）<input id="f_backup_interval" type="number" min="5" max="1440" value="<%=f_backup_interval%>">
+      <span class="hint">每过多久重新测速挑选一次备用节点</span></label>
+    <label>探测候选数<input id="f_backup_probe" type="number" min="3" max="40" value="<%=f_backup_probe%>">
+      <span class="hint">每轮实际发探测的节点个数</span></label>
+    <label>保留备用数<input id="f_backup_keep" type="number" min="1" max="10" value="<%=f_backup_keep%>">
+      <span class="hint">故障时按名次依次尝试接管</span></label>
+  </div>
+  <div class="cfgact">
+    <button id="btnSave" class="primary">保存设置</button>
+    <span class="muted" id="saveHint">留空提交将回落为默认值</span>
+  </div>
+</details>
+
+<section class="panel">
+  <div class="ph"><b>运行日志</b>
+    <button id="fLogAll" class="fbtn active">全部</button>
+    <button id="fLogSwitch" class="fbtn">切换</button>
+    <button id="fLogFail" class="fbtn">故障转移</button>
+    <button id="fLogTest" class="fbtn">测速</button>
+    <button id="fLogErr" class="fbtn">错误</button>
+    <button id="btnLog">刷新</button>
+  </div>
+  <div class="lgd">
+    <span><i class="g"></i>切换</span><span><i class="y"></i>转移</span>
+    <span><i class="r"></i>异常</span><span><i class="c"></i>测速</span><span><i class="v"></i>定时</span>
+  </div>
+  <pre id="logbox" style="margin-top:10px"></pre>
+</section>
+
+<div id="jserr" style="display:none;background:var(--status-bad-bg);border:1px solid var(--status-bad-border);color:var(--status-bad);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:14px;font-size:13px;white-space:pre-wrap"></div>
+
+<script>
+window.onerror=function(msg,src,line,col){ var e=$id("jserr"); if(e){ e.style.display="block"; e.textContent="JS错误: "+msg+" (行"+line+")"; } return false; };
+var TOKEN = "<%=token%>";
+var BASE = "<%=base%>";
+var TS_RAW = "<%=ts_raw%>";
+var BUSY0 = ("<%=busy%>" === "1");
+var DMAX = 2000;
+function $id(id){return document.getElementById(id);}
+
+function api(url, body, cb, ecb){
+  var opts = body ? {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body+'&token='+encodeURIComponent(TOKEN)} : {};
+  fetch(url, opts).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.text();
+  }).then(function(t){
+    if(cb) cb(t);
+  }).catch(function(e){ if(ecb) ecb(e); });
+}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* ---------- 节点名 → 标签 ---------- */
+var REGION=[[/新加坡|SG/i,'sg'],[/香港|HK/i,'hk'],[/台湾|台北/i,'tw'],[/日本|东京|大阪/i,'jp'],
+            [/韩国|首尔/i,'kr'],[/美国|洛杉矶|硅谷|西雅图|US/i,'us'],[/英国|伦敦/i,'eu'],
+            [/德国|法兰克福/i,'eu'],[/法国|巴黎/i,'eu'],[/荷兰|阿姆斯特丹/i,'eu'],
+            [/俄罗斯|莫斯科/i,'ru'],[/加拿大/i,'us'],[/澳大利亚|悉尼/i,'eu'],[/中国|上海|北京|广州|深圳/i,'cn']];
+function regionOf(s){ for(var i=0;i<REGION.length;i++){ if(REGION[i][0].test(s)) return REGION[i][1]; } return 'xx'; }
+function decorateNode(el){
+  if(!el || el.getAttribute('data-dec')) return;
+  var raw = String(el.textContent||'').trim();
+  el.setAttribute('data-dec','1');
+  if(raw.indexOf('|') < 0) return;
+  el.setAttribute('data-raw', raw);
+  var parts = raw.split('|'), h='';
+  for(var i=0;i<parts.length;i++){
+    var p = parts[i]; if(!p) continue;
+    var cls='';
+    if(i===0 && /^L\d+$/i.test(p)) cls='ln';
+    else if(p==='中转') cls='relay';
+    else if(p==='直连') cls='direct';
+    else if(/流媒体/.test(p)) cls='media';
+    else if(/^\d+x$/i.test(p)) cls='mul';
+    else if(/解锁|原生|家宽|免流|IEPL|IPLC/.test(p)) cls='feat';
+    else cls='rg-'+regionOf(p);
+    h += '<span class="chip '+cls+'">'+esc(p)+'</span>';
+  }
+  el.innerHTML = '<div class="chips">' + h + '</div>';
+}
+
+/* ---------- 延迟条 ---------- */
+function decorateDelay(td){
+  if(!td || td.getAttribute('data-dec')) return;
+  td.setAttribute('data-dec','1');
+  var v = parseFloat(td.getAttribute('data-v'));
+  var txt = String(td.textContent||'').trim();
+  var to = isNaN(v) || v >= 999999;
+  var pct = to ? 100 : Math.max(6, Math.min(100, Math.round(v/DMAX*100)));
+  var cls = to ? 'x' : (v<500 ? 'g' : (v<1000 ? 'y' : 'r'));
+  td.innerHTML = '<span class="dv"><i class="dvbar '+cls+'" style="width:'+pct+'%"></i><span class="dvt">'+esc(txt)+'</span></span>';
+}
+function decorateAll(root){
+  root = root || document;
+  var ns = root.querySelectorAll('.c-node');
+  for(var i=0;i<ns.length;i++) decorateNode(ns[i]);
+  var ds = root.querySelectorAll('td.d[data-v]');
+  for(var j=0;j<ds.length;j++) decorateDelay(ds[j]);
+}
+
+/* ---------- 表格排序 ---------- */
+var sortState = {};
+function cellSortVal(td, type){
+  if(!td) return type==='num' ? 999999 : '';
+  if(type==='num'){
+    var dv = td.getAttribute('data-v');
+    if(dv!==null && dv!=='' && !isNaN(parseFloat(dv))) return parseFloat(dv);
+    var n = parseFloat(String(td.textContent).replace(/[^\d.]/g,''));
+    return isNaN(n) ? 999999 : n;
+  }
+  return String(td.textContent).trim();
+}
+function bindSortable(tbl){
+  if(!tbl) return;
+  var ths = tbl.querySelectorAll('thead th[data-sort]');
+  for(var i=0;i<ths.length;i++){
+    (function(tbl, th, idx){
+      th.addEventListener('click', function(){
+        var type = th.getAttribute('data-sort') || 'str';
+        var key = (tbl.id||'t') + ':' + idx;
+        var dir = (sortState[key] === 'asc') ? 'desc' : 'asc';
+        sortState[key] = dir;
+        var tb = tbl.tBodies[0]; if(!tb) return;
+        var rows = Array.prototype.slice.call(tb.rows);
+        rows.sort(function(a,b){
+          var va = cellSortVal(a.cells[idx], type), vb = cellSortVal(b.cells[idx], type);
+          if(type==='num') return dir==='asc' ? va-vb : vb-va;
+          return dir==='asc' ? String(va).localeCompare(String(vb),'zh') : String(vb).localeCompare(String(va),'zh');
+        });
+        for(var k=0;k<rows.length;k++) tb.appendChild(rows[k]);
+        var all = tbl.querySelectorAll('thead th');
+        for(var j=0;j<all.length;j++) all[j].removeAttribute('data-dir');
+        th.setAttribute('data-dir', dir);
+      });
+    })(tbl, ths[i], i);
+  }
+}
+
+/* ---------- 搜索 ---------- */
+function applySearch(){
+  var si = $id('nodeSearch'); if(!si) return;
+  var q = si.value.toLowerCase().trim();
+  var nt = $id('nodesTable'); if(!nt || !nt.tBodies[0]) return;
+  var tb = nt.tBodies[0];
+  var vis = 0;
+  for(var i=0;i<tb.rows.length;i++){
+    var tr = tb.rows[i];
+    var cn = tr.cells[0];
+    var hay = ((cn && cn.getAttribute('data-raw')) || tr.textContent || '').toLowerCase();
+    var hit = (!q || hay.indexOf(q) >= 0);
+    tr.style.display = hit ? '' : 'none';
+    if(hit) vis++;
+  }
+  $id('searchCount').textContent = q ? ('匹配 ' + vis + ' 个') : '';
+}
+function bindSearch(){
+  var si = $id('nodeSearch'); if(!si) return;
+  si.addEventListener('input', applySearch);
+}
+
+/* ---------- 历史记录 ---------- */
+var lastHistSig='';
+function parseHist(line){
+  var m = String(line).match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+switch=(\d+)\s+group=(\S+)\s+best=(.+?)\s+(\d+)\s*ms\s+可用=(\d+)\s+失效=(\d+)\s+假节点=(\d+)/);
+  if(!m) return null;
+  return {t:m[1], sw:m[2]==='1', group:m[3], best:m[4], d:parseInt(m[5],10), ok:m[6], dead:m[7], fake:m[8]};
+}
+function renderHistory(arr){
+  var box = $id('hist'); if(!box) return;
+  if(!arr || !arr.length){ box.innerHTML = '<div class="empty"><div>暂无历史记录，点「测速并切换」先跑一轮</div></div>'; return; }
+  var sig = arr.length + '|' + arr[arr.length-1];
+  if(sig === lastHistSig) return;
+  lastHistSig = sig;
+  var h = '<table><thead><tr><th data-sort="str" style="width:148px">时间</th>'
+        + '<th data-sort="str" style="width:74px">结果</th><th data-sort="str">最优节点</th>'
+        + '<th data-sort="num" style="width:110px">延迟</th><th data-sort="num" style="width:64px">可用</th>'
+        + '<th data-sort="num" style="width:64px">失效</th><th data-sort="num" style="width:72px">假节点</th></tr></thead><tbody>';
+  var n = 0;
+  for(var i=0;i<arr.length;i++){
+    var r = parseHist(arr[i]); if(!r) continue;
+    n++;
+    var sw = r.sw ? '<span style="color:var(--status-ok);font-weight:600">已切换</span>' : '<span class="muted">保持</span>';
+    h += '<tr><td class="d">'+esc(r.t)+'</td><td>'+sw+'</td><td class="c-node">'+esc(r.best)+'</td>'
+       + '<td class="d" data-v="'+r.d+'">'+r.d+' ms</td>'
+       + '<td class="d" data-v="'+r.ok+'">'+r.ok+'</td>'
+       + '<td class="d" data-v="'+r.dead+'">'+r.dead+'</td>'
+       + '<td class="d" data-v="'+r.fake+'">'+r.fake+'</td></tr>';
+  }
+  h += '</tbody></table>';
+  if(!n){ box.innerHTML = '<div class="empty"><div>历史记录格式无法解析</div></div>'; return; }
+  box.innerHTML = h;
+  var t = box.querySelector('table');
+  if(t){ t.id='histTable'; decorateAll(box); bindSortable(t); }
+}
+
+/* ---------- 相对时间 ---------- */
+function relTime(ts){
+  if(!ts) return '';
+  var diff = Math.floor(Date.now()/1000) - parseInt(ts,10);
+  if(isNaN(diff) || diff < 0) return '';
+  if(diff < 60) return diff + ' 秒前';
+  if(diff < 3600) return Math.floor(diff/60) + ' 分钟前';
+  if(diff < 86400) return Math.floor(diff/3600) + ' 小时前';
+  return Math.floor(diff/86400) + ' 天前';
+}
+function delayClass(ms){
+  var n = parseInt(String(ms).replace(/[^\d]/g,''),10);
+  if(isNaN(n)) return '';
+  return n < 500 ? 'hl-ok' : (n < 1000 ? 'hl-warn' : 'hl-bad');
+}
+
+document.addEventListener('click', function(e){
+  var el=e.target; while(el && el!==document && !(el.className && String(el.className).indexOf('node-row')>=0)) el=el.parentNode;
+  if(!el || el===document) return;
+  var name=el.getAttribute('data-name'); if(!name) return;
+  if(wasRunning || runStarting){ showBanner('warn','全量测速进行中','单节点测速需等待其结束后再进行'); return; }
+  if(!confirm('开始测速节点 "'+name+'"？\n将依次测试 AI / 国外 / 国内各大网站速度')) return;
+  hideBanner();
+  showBanner('info','正在测速节点 '+name+' …','约 10-20 秒，完成后自动跳转结果页');
+  api(BASE+'/testnode','name='+encodeURIComponent(name),function(t){
+    var d; try{ d=JSON.parse(t); }catch(err){ d=null; }
+    if(!d || !d.results){
+      showBanner('err','节点测速失败', String(t||'').slice(0,120));
+      return;
+    }
+    window.location.href = BASE + '/nodetest';
+  }, function(){
+    showBanner('err','节点测速失败：请求未送达');
+  });
+});
+
+/* ---------- 结果横幅 ---------- */
+function showBanner(kind, main, sub){
+  var b=$id('runBanner'); if(!b) return;
+  b.className='banner '+kind;
+  b.innerHTML='<span>'+esc(main)+'</span>'
+    + (sub ? '<span class="bsub">'+esc(sub)+'</span>' : '')
+    + '<span class="bx" title="关闭">&#215;</span>';
+  b.style.display='flex';
+  var x=b.querySelector('.bx');
+  if(x) x.onclick=function(){ b.style.display='none'; };
+}
+function hideBanner(){ var b=$id('runBanner'); if(b) b.style.display='none'; }
+
+/* ---------- 测速进度 ---------- */
+var wasRunning = false;
+var runStartAt = 0;
+var maxPct = 0;
+var progTimer = null;
+var runStarting = false;
+var lastRunSwitch = 1;
+var sawLive = false;
+var STAGE_OF = {start:0, collect:0, testing:1, nodes:1, sites:2, switch:3, done:4};
+var settling = false;
+var settleTimer = null;
+var pctSince = 0;
+var PHASE_HINT = {start:'启动', collect:'收集节点', testing:'逐个测速',
+                  nodes:'汇总结果', sites:'测分类站点', switch:'切换节点', done:'完成'};
+var STALL_AFTER = 8;
+var lastMsg = '', lastPhase = '';
+
+function setProgressVisible(v){
+  $id('pbarWrap').style.display = v ? 'block' : 'none';
+  if(!v) resetDispPct();
+}
+function curFilter(){ var m=location.search.match(/filter=([a-z]+)/); return m ? m[1] : 'all'; }
+function fmtElapsed(ms){
+  var s=Math.floor(ms/1000);
+  if(s<60) return s+' 秒';
+  return Math.floor(s/60)+' 分 '+(s%60)+' 秒';
+}
+function renderStages(phase){
+  var idx = STAGE_OF[phase]; if(idx==null) idx = 0;
+  var els = $id('pbarStages').querySelectorAll('.st');
+  for(var i=0;i<els.length;i++){
+    var c = (phase === 'done') ? 'done' : (i < idx ? 'done' : (i === idx ? 'active' : ''));
+    els[i].className = c ? ('st ' + c) : 'st';
+  }
+}
+/* ===== 进度平滑：显示值向目标值缓动，消除跳格 ===== */
+var dispPct = 0, targetPct = 0, dispTimer = null;
+function applyDispPct(){
+  var v = Math.round(dispPct * 10) / 10;
+  $id('pbarFill').style.width = v + '%';
+  var k = $id('pbarKnob'); if(k) k.style.left = v + '%';
+  $id('pbarPct').textContent = Math.round(v) + '%';
+}
+function ensureDispTimer(){
+  if(dispTimer) return;
+  dispTimer = setInterval(function(){
+    var done = $id('pbarWrap').className.indexOf('done') >= 0;
+    if(dispPct < targetPct){
+      var diff = targetPct - dispPct;
+      var step = diff * (done ? 0.28 : 0.10) + 0.08;  /* 比例追赶 + 保底速度 */
+      dispPct = Math.min(targetPct, dispPct + step);
+      applyDispPct();
+    } else if(dispPct > targetPct){
+      dispPct = targetPct;
+      applyDispPct();
+    }
+  }, 80);
+}
+function setTargetPct(p, fast){
+  targetPct = p;
+  if(fast) dispPct = Math.max(dispPct, p - 6);  /* 完成时先贴近，动画短促爽快 */
+  ensureDispTimer();
+}
+function resetDispPct(){
+  if(dispTimer){ clearInterval(dispTimer); dispTimer = null; }
+  dispPct = 0; targetPct = 0;
+}
+function newCycleStart(){
+  /* 服务端已进入新一轮：复位本地运行态，避免被上一轮的高 maxPct 钳死 */
+  maxPct = 0; pctSince = Date.now(); runStartAt = 0; sawLive = false;
+  lastMsg = ''; lastPhase = '';
+  resetDispPct();
+}
+function paintProgress(d){
+  var pct = parseInt(d.pct,10); if(isNaN(pct)) pct = 0;
+  var done = (d.phase === 'done');
+
+  /* 新一轮检测：阶段回退(如 done/sites -> collect)或 pct 骤降(>25)，页面未观察到空闲间隙 */
+  if(!done && lastPhase){
+    var ci = STAGE_OF[d.phase], li = STAGE_OF[lastPhase];
+    if((li != null && ci != null && ci < li) || pct < maxPct - 25) newCycleStart();
+  }
+  /* 停滞计时：pct 增长或子进度消息推进都算活动（防粗粒度 pct 期间的误报） */
+  if(pct > maxPct || d.msg !== lastMsg) pctSince = Date.now();
+  if(pct > maxPct) maxPct = pct;
+  lastMsg = d.msg;
+  lastPhase = d.phase;
+
+  var wrap = $id('pbarWrap');
+  setProgressVisible(true);
+  wrap.className = 'pb' + (done ? ' done' : '');
+
+  setTargetPct(pct, done);
+  $id('pbarMsg').textContent = d.msg || '';
+  renderStages(d.phase);
+
+  var el = runStartAt ? ('已用时 ' + fmtElapsed(Date.now()-runStartAt)) : '';
+  var stalled = false;
+  if(!done && pctSince){
+    var still = Math.floor((Date.now()-pctSince)/1000);
+    if(still >= STALL_AFTER){
+      stalled = true;
+      el += (el ? ' · ' : '') + (PHASE_HINT[d.phase] || '处理中') + '已停滞 ' + still + ' 秒';
+    }
+  }
+  if(!done) wrap.className = 'pb' + (stalled ? ' stall' : '');
+  $id('pbarElapsed').textContent = el;
+}
+function startProgressPolling(){ if(progTimer) return; progTimer=setInterval(refreshProgress, 900); }
+function stopProgressPolling(){ if(progTimer){ clearInterval(progTimer); progTimer=null; } }
+
+function settleProgress(){
+  settling = true;
+  maxPct = 100;
+  paintProgress({phase:'done', msg:'测速完成', pct:100});
+  if(settleTimer) clearTimeout(settleTimer);
+  settleTimer = setTimeout(function(){
+    settling = false; settleTimer = null;
+    setProgressVisible(false);
+    var w=$id('pbarWrap'); if(w) w.className='pb';
+    maxPct = 0; runStartAt = 0; sawLive = false; pctSince = 0; lastMsg = ''; lastPhase = '';
+  }, 3500);
+}
+function clearSettle(){
+  if(settleTimer){ clearTimeout(settleTimer); settleTimer=null; }
+  settling = false;
+}
+function refreshProgress(){
+  api(BASE+'/progress', null, function(t){
+    var d; try{ d=JSON.parse(t); }catch(e){ return; }
+    if(!d) return;
+    if(d.phase === 'done' && !sawLive) return;
+    if(d.phase && d.phase !== 'done') sawLive = true;
+    if(!runStartAt) runStartAt = Date.now();
+    paintProgress(d);
+  });
+}
+
+/* ---------- 原地刷新 ---------- */
+function reDecorate(){
+  decorateAll();
+  var st=$id('sitesBox') && $id('sitesBox').querySelector('table');
+  if(st && !st.id){ st.id='sitesTable'; bindSortable(st); }
+  var all=document.querySelectorAll('th[data-dir]');
+  for(var i=0;i<all.length;i++) all[i].removeAttribute('data-dir');
+  sortState={};
+}
+
+/* ---------- 备用节点卡 ---------- */
+var lastBackupSig = '';
+function relFromTs(ts){
+  var n = parseInt(ts, 10);
+  if(!n) return '';
+  var s = Math.floor(Date.now()/1000) - n;
+  if(s < 0) s = 0;
+  if(s < 60)    return '刚刚';
+  if(s < 3600)  return Math.floor(s/60) + ' 分钟前';
+  if(s < 86400) return Math.floor(s/3600) + ' 小时前';
+  return Math.floor(s/86400) + ' 天前';
+}
+function renderBackup(bk){
+  var list=$id('backupList'), sub=$id('backupSub');
+  if(!list) return;
+  if(!bk || !bk.list || !bk.list.length){
+    list.innerHTML='<span class="bk-empty">尚未预选，点「立即预选」生成</span>';
+    if(sub) sub.textContent='名单为空时，故障转移会退回当场串行探测（实测约 6 秒）';
+    return;
+  }
+  var h='';
+  for(var i=0;i<bk.list.length;i++){
+    var x=bk.list[i], dv=x.d;
+    var col = (dv!=null && dv<500) ? 'var(--status-ok)' : ((dv!=null && dv<1000) ? 'var(--status-warn)' : 'var(--status-bad)');
+    h += '<span class="bk-item r'+(i+1)+'"><i>'+(i+1)+'</i>'
+       + '<span class="nm">'+esc(x.n)+'</span>'
+       + '<b style="color:'+col+'">'+(dv!=null ? (dv+' ms') : '-')+'</b></span>';
+  }
+  list.innerHTML=h;
+  if(sub){
+    sub.textContent = '上次预选 ' + (relFromTs(bk.ts) || '刚刚')
+      + ' · 探测 ' + (bk.probed || 0) + ' 个候选 · 故障时可 1 秒内接管';
+  }
+}
+function applyParts(d){
+  var setTxt=function(id,v){ var e=$id(id); if(e) e.textContent = (v==null||v==='') ? '-' : v; };
+  var cur=$id('cur'), best=$id('best');
+  if(cur){ cur.innerHTML=esc(d.cur||'-'); cur.removeAttribute('data-dec'); cur.removeAttribute('data-raw'); }
+  if(best){ best.innerHTML=esc(d.best||'-'); best.removeAttribute('data-dec'); best.removeAttribute('data-raw'); }
+  setTxt('bestd', d.bestd); setTxt('cands', d.cands);
+  var sw=$id('swinfo');
+  if(sw){
+    sw.textContent = d.swinfo || '未变';
+    sw.className = (d.swinfo === '已切换') ? 'ok' : (d.swinfo === '未变' ? 'muted' : '');
+  }
+  var ns=$id('nodesSummary'); if(ns) ns.textContent = d.nodes_sum || '尚未测速';
+  var nt=$id('nodesTime');
+  if(nt){ var r2 = relTime(d.ts_raw); nt.textContent = (d.tsh || '') + (r2 ? '（' + r2 + '）' : ''); }
+  var bc=$id('bestdCard'); if(bc) bc.className = 'card ' + (delayClass(d.bestd) || '');
+  var tt=$id('topTable');     if(tt && tt.tBodies[0] && d.top_table!=null)    tt.tBodies[0].innerHTML = d.top_table;
+  var ntab=$id('nodesTable'); if(ntab && ntab.tBodies[0] && d.nodes_rows!=null) ntab.tBodies[0].innerHTML = d.nodes_rows;
+  var sb=$id('sitesBox');     if(sb && d.sites_table!=null) sb.innerHTML = d.sites_table;
+  var bl=$id('backupList');   if(bl && d.backup_html!=null) bl.innerHTML = d.backup_html;
+  var bs=$id('backupSub');    if(bs && d.backup_sub!=null)  bs.textContent = d.backup_sub;
+  reDecorate();
+  applySearch();
+  var cards = document.querySelectorAll('.card');
+  for(var i=0;i<cards.length;i++){ cards[i].classList.remove('flash'); void cards[i].offsetWidth; cards[i].classList.add('flash'); }
+  var ll=$id('liveLabel');
+  if(ll){ var r=relTime(TS_RAW); ll.textContent = r ? (r + '更新') : '实时'; }
+}
+
+function setRunUI(running){
+  var bt=$id('btnRun'), tt=$id('btnTest');
+  if(bt){ bt.disabled=running; bt.textContent = running ? '测速中…' : '测速并切换'; }
+  if(tt){ tt.disabled=running; }
+}
+function onRunFinished(){
+  setRunUI(false);
+  stopProgressPolling();
+  var cost = runStartAt ? fmtElapsed(Date.now()-runStartAt) : '';
+  api(BASE+'/parts?filter='+encodeURIComponent(curFilter()), null, function(t){
+    var d=null; try{ d=JSON.parse(t); }catch(e){}
+    if(!d){ location.reload(); return; }
+    applyParts(d);
+    settleProgress();
+    var switched = (d.swinfo === '已切换');
+    var headline = switched ? ('已切换到 ' + (d.cur || '-'))
+                 : lastRunSwitch ? ('保持当前节点 ' + (d.cur || '-'))
+                 : ('测速完成，当前节点 ' + (d.cur || '-'));
+    showBanner(switched ? 'ok' : 'info', headline,
+      '最快 ' + (d.best || '-') + ' · ' + (d.bestd || '-') + ' · ' + (d.nodes_sum || '')
+        + (cost ? ' · 用时 ' + cost : ''));
+    refreshLog();
+    wasRunning = false;
+    poll();
+  }, function(){ location.reload(); });
+}
+function startRun(sw){
+  if(runStarting || wasRunning) return;
+  runStarting = true;
+  lastRunSwitch = sw;
+  sawLive = false;
+  runStartAt = Date.now();
+  pctSince = Date.now();
+  maxPct = 0; lastMsg = ''; lastPhase = '';
+  clearSettle();
+  hideBanner();
+  paintProgress({phase:'start', msg:'正在启动测速…', pct:2});
+  api(BASE+'/run', 'switch='+sw, function(t){
+    runStarting = false;
+    var d=null; try{ d=JSON.parse(t); }catch(e){}
+    if(d && d.ok === false){
+      showBanner('warn', d.msg || '已有测速在运行', '已转为跟随当前进度');
+      wasRunning = true; setRunUI(true); startProgressPolling();
+      return;
+    }
+    if(!d || d.ok !== true){
+      setRunUI(false); setProgressVisible(false);
+      showBanner('err', '启动测速失败', (d && d.msg) ? d.msg : '接口未返回成功状态');
+      return;
+    }
+    wasRunning = true; setRunUI(true); startProgressPolling();
+  }, function(){
+    runStarting = false;
+    setRunUI(false); setProgressVisible(false);
+    showBanner('err', '启动测速失败：请求未送达', '检查设备连接后重试');
+  });
+}
+
+var pollTimer = null, curPollMs = 0;
+var POLL_RUN = 2000, POLL_IDLE = 10000;
+function schedulePoll(ms){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(poll, ms);
+  curPollMs = ms;
+}
+function poll(){
+  api(BASE+'/status', null, function(t){
+    var d=null; try{ d=JSON.parse(t); }catch(e){}
+    var running = d ? (d.running===true) : (t.indexOf('"running":true') >= 0);
+    if(runStarting) running = true;
+    setCardsPulsing(running);
+    var pill = $id('pill');
+    if(pill){
+      var label = pill.querySelector('.pl'); if(!label){ label=document.createElement('span'); label.className='pl'; pill.appendChild(label); }
+      label.textContent = running ? '测速中…' : '空闲';
+      pill.className = 'pill ' + (running ? 'run' : 'idle');
+    }
+    var ll=$id('liveLabel');
+    if(ll){ var r=relTime(TS_RAW); ll.textContent = r ? (r + '更新') : '实时'; }
+    if(running){ startProgressPolling(); refreshProgress(); refreshLog(); }
+    else { stopProgressPolling(); if(!runStarting && !settling) setProgressVisible(false); }
+    if(d && d.backup){
+      var sig = (d.backup.ts||0) + '|' + (d.backup.probed||0) + '|' + ((d.backup.list&&d.backup.list.length)||0);
+      if(sig !== lastBackupSig){ lastBackupSig = sig; renderBackup(d.backup); }
+    }
+    if(d && d.history) renderHistory(d.history);
+    if(wasRunning && !running && !runStarting){ onRunFinished(); }
+    wasRunning = running;
+    var want = running ? POLL_RUN : POLL_IDLE;
+    if(want !== curPollMs) schedulePoll(want);
+  });
+}
+$id('btnTest').onclick=function(){ startRun(0); };
+$id('btnRun').onclick=function(){ startRun(1); };
+
+function syncHeaderFromForm(){
+  var iv=$id('f_interval'), lab=$id('intvLabel'), at=$id('autoToggle');
+  if(iv && lab && at){
+    lab.textContent = at.checked ? ('每 ' + (iv.value || '30') + ' 分钟自动测速') : '自动测速已停用';
+  }
+  var fo=$id('f_failover_enable'), foi=$id('foInfo');
+  if(fo && foi){
+    foi.textContent = fo.checked
+      ? ('故障转移: 启用 · 阈值 ' + ($id('f_fo_threshold').value || '3000')
+         + 'ms · 冷却 ' + ($id('f_fo_cooldown').value || '120') + 's')
+      : '故障转移: 停用';
+  }
+  var bk=$id('f_backup_enable'), bkt=$id('bkTag');
+  if(bk && bkt){
+    bkt.textContent = bk.checked
+      ? ('每 ' + ($id('f_backup_interval').value || '90') + ' 分钟预选')
+      : '已停用';
+  }
+  var sum=$id('cfgBox') && $id('cfgBox').querySelector('summary .muted');
+  if(sum && fo && bk){
+    sum.textContent = '17 项 · 故障转移已' + (fo.checked ? '启用' : '停用')
+      + ' · 备用节点' + (bk.checked ? '已启用' : '已停用');
+  }
+}
+$id('btnSave').onclick=function(){
+  var btn=this; btn.disabled=true; $id('saveHint').textContent='保存中…';
+  function v(id){ return encodeURIComponent($id(id).value); }
+  var b='interval='+v('f_interval')+'&threshold='+v('f_threshold')+'&group='+v('f_group')
+    +'&test_url='+v('f_test_url')+'&gemini_url='+v('f_gemini_url')+'&exclude='+v('f_exclude')
+    +'&timeout='+v('f_timeout')+'&sites='+v('f_sites')+'&testsites='+v('f_testsites')
+    +'&failover_threshold='+v('f_fo_threshold')+'&failover_cooldown='+v('f_fo_cooldown')
+    +'&failover_enable='+($id('f_failover_enable').checked?'1':'0')
+    +'&backup_interval='+v('f_backup_interval')+'&backup_probe='+v('f_backup_probe')
+    +'&backup_keep='+v('f_backup_keep')
+    +'&backup_enable='+($id('f_backup_enable').checked?'1':'0');
+  api(BASE+'/save', b, function(t){
+    btn.disabled=false;
+    var d=null; try{ d=JSON.parse(t); }catch(e){}
+    if(!d || d.ok!==true){
+      $id('saveHint').textContent='保存失败，请重试';
+      showBanner('err','保存设置失败','配置未写入');
+      return;
+    }
+    $id('saveHint').textContent='已保存';
+    syncHeaderFromForm();
+    showBanner('ok','设置已保存',
+      '故障转移已' + ($id('f_failover_enable').checked ? '启用' : '停用')
+      + ' · 自动测速' + ($id('autoToggle').checked ? '开启' : '关闭'));
+    setTimeout(function(){ $id('saveHint').textContent='留空提交将回落为默认值'; }, 2500);
+  }, function(){
+    btn.disabled=false;
+    $id('saveHint').textContent='保存失败';
+    showBanner('err','保存失败：请求未送达');
+  });
+};
+
+$id('btnBackup').onclick=function(){
+  var btn=this;
+  btn.disabled=true; btn.textContent='预选中…';
+  api(BASE+'/backupnow', '', function(t){
+    btn.disabled=false; btn.textContent='立即预选';
+    var d=null; try{ d=JSON.parse(t); }catch(e){}
+    if(d && d.ok===false){
+      showBanner('warn', d.msg || '已有测速在运行', '请等当前轮次结束后再试');
+      return;
+    }
+    lastBackupSig='';
+    api(BASE+'/parts?filter='+encodeURIComponent(curFilter()), null, function(t2){
+      var p=null; try{ p=JSON.parse(t2); }catch(e){}
+      if(p) applyParts(p); else location.reload();
+    });
+    showBanner('ok','已重新预选备用节点','故障转移将优先按这份名单依次接管');
+    refreshLog();
+  }, function(){
+    btn.disabled=false; btn.textContent='立即预选';
+    showBanner('err','预选失败：请求未送达','');
+  });
+};
+$id('autoToggle').onchange=function(){
+  var en=this.checked?1:0;
+  api(BASE+'/toggle','enabled='+en, function(t){
+    var d=null; try{ d=JSON.parse(t); }catch(e){}
+    if(!d || d.ok!==true){ showBanner('err','切换自动测速失败'); return; }
+    syncHeaderFromForm();
+    showBanner(en?'ok':'info', en?'已启用自动测速':'已停用自动测速',
+      en ? ('每 ' + ($id('f_interval').value||'30') + ' 分钟一轮') : '仍可手动测速');
+  }, function(){ showBanner('err','切换失败：请求未送达'); });
+};
+var logText='', logFilter='all';
+function logType(line){
+  if(line.indexOf('已故障转移')>=0) return 'sw';
+  if(line.indexOf('[failover]')>=0 && line.indexOf('异常')>=0) return 'fail';
+  if(line.indexOf('[failover]')>=0) return 'failok';
+  if(line.indexOf('异常')>=0 || line.indexOf('失败')>=0 || line.indexOf('错误')>=0 || line.indexOf('Cannot')>=0) return 'err';
+  if(line.indexOf('已切换')>=0 || line.indexOf('无需切换')>=0 || line.indexOf('保持当前')>=0) return 'sw';
+  if(line.indexOf('全量测速')>=0 || line.indexOf('开始测速')>=0 || line.indexOf('分类测速')>=0) return 'test';
+  if(line.indexOf('[cron]')>=0) return 'cron';
+  return 'plain';
+}
+function renderLog(){
+  var lines=logText.split('\n'), h='';
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i]; if(!line.trim()) continue;
+    var t=logType(line);
+    if(logFilter==='sw' && t!=='sw') continue;
+    if(logFilter==='fail' && t!=='fail' && t!=='failok') continue;
+    if(logFilter==='test' && t!=='test') continue;
+    if(logFilter==='err' && t!=='err') continue;
+    var color = t==='sw' ? '#34d399' : (t==='fail' ? '#f87171' : (t==='failok' ? '#fbbf24' : (t==='err' ? '#f87171' : (t==='test' ? '#38bdf8' : (t==='cron' ? '#c084fc' : '#94a3b8')))));
+    h += '<span style="color:'+color+'">'+esc(line)+'</span>\n';
+  }
+  var lb=$id('logbox');
+  if(!h){ lb.innerHTML='<span class="muted">暂无记录</span>'; return; }
+  var stick = (lb.scrollHeight - lb.scrollTop - lb.clientHeight) < 40;
+  lb.innerHTML = h;
+  if(stick) lb.scrollTop = lb.scrollHeight;
+}
+function refreshLog(){ api(BASE+'/log', null, function(t){ logText=t; renderLog(); }); }
+function setLogFilterBtn(btn){ ['fLogAll','fLogSwitch','fLogFail','fLogTest','fLogErr'].forEach(function(id){ $id(id).className='fbtn'; }); btn.className='fbtn active'; }
+$id('fLogAll').onclick=function(){ logFilter='all'; setLogFilterBtn(this); renderLog(); };
+$id('fLogSwitch').onclick=function(){ logFilter='sw'; setLogFilterBtn(this); renderLog(); };
+$id('fLogFail').onclick=function(){ logFilter='fail'; setLogFilterBtn(this); renderLog(); };
+$id('fLogTest').onclick=function(){ logFilter='test'; setLogFilterBtn(this); renderLog(); };
+$id('fLogErr').onclick=function(){ logFilter='err'; setLogFilterBtn(this); renderLog(); };
+$id('btnLog').onclick=refreshLog;
+
+/* ---------- 初始化 ---------- */
+(function init(){
+  decorateAll();
+  bindSortable($id('topTable'));
+  bindSortable($id('nodesTable'));
+  var st = $id('sitesBox') && $id('sitesBox').querySelector('table');
+  if(st){ st.id='sitesTable'; bindSortable(st); }
+  bindSearch();
+  var bc = $id('bestdCard'), bt = $id('bestd');
+  if(bc && bt){ var c = delayClass(bt.textContent); if(c) bc.className = 'card ' + c; }
+  var rel = relTime(TS_RAW);
+  if(rel){ var nt=$id('nodesTime'); nt.textContent = nt.textContent + '（' + rel + '）'; }
+  var ll0=$id('liveLabel'); if(ll0){ ll0.textContent = rel ? (rel + '更新') : '实时'; }
+  if(BUSY0){ wasRunning = true; setRunUI(true); setProgressVisible(true); startProgressPolling(); }
+  schedulePoll(BUSY0 ? POLL_RUN : POLL_IDLE);
+  poll();
+  refreshLog();
+
+  refreshTrendChart();
+})();
+
+/* ========== 趋势图 Canvas 自绘 ========== */
+function parseHistoryForChart(arr){
+  var out = [];
+  for(var i = 0; i < arr.length; i++){
+    var m = String(arr[i]).match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+switch=\d+\s+group=\S+\s+best=(.+?)\s+(\d+)\s*ms\s+可用=(\d+)\s+失效=(\d+)\s+假节点=(\d+)\s+决赛=(\d+)ms/);
+    if(!m) continue;
+    out.push({
+      t: m[1].slice(5, 16).replace('-', '/'),
+      best: parseInt(m[3], 10),
+      ok: parseInt(m[4], 10),
+      final: parseInt(m[7], 10)
+    });
+  }
+  return out;
+}
+
+/* ========== 趋势图 v2：平滑曲线 + 双轴共用延迟刻度 + hover tooltip ========== */
+var TREND_SERIES = [
+  {key: 'best',  label: '最优延迟', color: '#059669', unit: 'ms', axis: 'left',  dash: null,  w: 2.5, area: true},
+  {key: 'final', label: '决赛耗时', color: '#f59e0b', unit: 'ms', axis: 'left',  dash: [5, 4], w: 2, area: false},
+  {key: 'ok',    label: '可用节点', color: '#0284c7', unit: '',   axis: 'right', dash: null,  w: 2, area: true}
+];
+/* final 为整轮耗时（量纲与延迟不同），默认折叠，点图例可展开 */
+var TREND = {data: [], hidden: {final: true}, geom: null, hover: -1, bound: false, animated: false, raf: null};
+/* 恢复用户上次的图例开关选择（如决赛耗时展开状态） */
+try{
+  var _sv = localStorage.getItem('ocspeed_trend_hidden');
+  if(_sv){ var _hv = JSON.parse(_sv); if(_hv && typeof _hv === 'object') TREND.hidden = _hv; }
+}catch(e){}
+
+function niceCeil(v, integerOnly){
+  if(!(v > 0)) return 1;
+  var exp = Math.floor(Math.log(v) / Math.LN10);
+  var base = Math.pow(10, exp);
+  var f = v / base;
+  var ladder = [1, 1.5, 2, 2.5, 5, 10];
+  var nf = 10, li;
+  for(li = 0; li < ladder.length; li++){ if(f <= ladder[li]){ nf = ladder[li]; break; } }
+  var r = nf * base;
+  if(integerOnly && r % 1 !== 0) r = Math.ceil(v);
+  return r;
+}
+function trendLum(bg){
+  var m = String(bg || '').match(/rgba?\(([^)]+)\)/);
+  if(!m) return 255;
+  var c = m[1].split(',');
+  var r = parseFloat(c[0]) || 0, g = parseFloat(c[1]) || 0, b = parseFloat(c[2]) || 0;
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+function trendTheme(){
+  var panel = $id('trendPanel');
+  var dark = false;
+  if(panel){
+    var bg = getComputedStyle(panel).backgroundColor || '';
+    var m = bg.match(/rgba?\(([^)]+)\)/);
+    var a = m ? parseFloat((m[1].split(',')[3] !== undefined ? m[1].split(',')[3] : '1')) : 1;
+    if(!m || (m && a < 0.5)) dark = trendLum(getComputedStyle(document.body).backgroundColor) < 128;
+    else dark = trendLum(bg) < 128;
+  }
+  return dark
+    ? {grid: 'rgba(255,255,255,0.07)', vgrid: 'rgba(255,255,255,0.05)', axis: 'rgba(148,163,184,0.85)', badge: 'rgba(30,41,59,0.9)', badgeText: '#e2e8f0'}
+    : {grid: 'rgba(15,23,42,0.07)',    vgrid: 'rgba(15,23,42,0.04)',    axis: '#94a3b8',                badge: 'rgba(255,255,255,0.92)', badgeText: '#334155'};
+}
+/* 单调三次插值切线（Fritsch-Carlson）：平滑但不过冲 */
+function trendTangents(xs, ys){
+  var n = xs.length, i, dx = [], m = [], t = [];
+  for(i = 0; i < n - 1; i++){
+    dx[i] = xs[i + 1] - xs[i];
+    m[i] = dx[i] ? (ys[i + 1] - ys[i]) / dx[i] : 0;
+  }
+  if(n < 2) return t;
+  t[0] = m[0];
+  t[n - 1] = m[n - 2];
+  for(i = 1; i < n - 1; i++){
+    if(m[i - 1] * m[i] <= 0) t[i] = 0;
+    else {
+      var w1 = 2 * dx[i] + dx[i - 1], w2 = dx[i] + 2 * dx[i - 1];
+      t[i] = (w1 + w2) / (w1 / m[i - 1] + w2 / m[i]);
+    }
+  }
+  return t;
+}
+function trendPath(ctx, xs, ys, baseY){
+  var n = xs.length, t = trendTangents(xs, ys), i, h;
+  if(n < 2) return;
+  ctx.moveTo(xs[0], ys[0]);
+  for(i = 0; i < n - 1; i++){
+    h = xs[i + 1] - xs[i];
+    ctx.bezierCurveTo(xs[i] + h / 3, ys[i] + t[i] * h / 3,
+                      xs[i + 1] - h / 3, ys[i + 1] - t[i + 1] * h / 3,
+                      xs[i + 1], ys[i + 1]);
+  }
+  if(baseY !== null && baseY !== undefined){
+    ctx.lineTo(xs[n - 1], baseY);
+    ctx.lineTo(xs[0], baseY);
+    ctx.closePath();
+  }
+}
+function trendSeriesHasData(data, key){
+  for(var i = 0; i < data.length; i++){
+    var v = data[i][key];
+    if(v !== undefined && v !== null && v > 0) return true;
+  }
+  return false;
+}
+function trendVisible(data){
+  var out = [];
+  for(var i = 0; i < TREND_SERIES.length; i++){
+    var s = TREND_SERIES[i];
+    var item = $id('trendLegend') ? $id('trendLegend').querySelector('.lg[data-key="' + s.key + '"]') : null;
+    var has = trendSeriesHasData(data, s.key);
+    if(item){
+      if(!has) item.setAttribute('hidden', 'hidden');
+      else item.removeAttribute('hidden');
+      if(TREND.hidden[s.key]) item.className = 'lg off';
+      else item.className = 'lg';
+    }
+    if(has && !TREND.hidden[s.key]) out.push(s);
+  }
+  return out;
+}
+function trendHex(hex, alpha){
+  var h = hex.replace('#', '');
+  var r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+}
+function trendBadge(ctx, x, y, text, color, th, maxX){
+  ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  var tw = ctx.measureText(text).width, bw = tw + 14, bh = 18;
+  var bx = x + 8;
+  if(bx + bw > maxX) bx = x - 8 - bw;
+  var by = y - bh / 2;
+  ctx.fillStyle = th.badge;
+  if(ctx.roundRect){
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 5);
+    ctx.fill();
+    ctx.strokeStyle = trendHex(color, 0.35);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.fillRect(bx, by, bw, bh);
+  }
+  ctx.fillStyle = th.badgeText;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, bx + 7, by + bh / 2 + 0.5);
+}
+
+function drawTrendChart(data, p){
+  var canvas = $id('trendCanvas');
+  var empty = $id('trendEmpty');
+  if(!canvas) return;
+  trendBind();
+  if(!data || data.length < 2){
+    TREND.data = data || [];
+    canvas.style.display = 'none';
+    if(empty) empty.style.display = 'flex';
+    return;
+  }
+  TREND.data = data;
+  canvas.style.display = 'block';
+  if(empty) empty.style.display = 'none';
+
+  var rect = canvas.getBoundingClientRect();
+  if(rect.width < 20) return;
+  var prog = (typeof p === 'number') ? p : 1;
+
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  var ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  var W = rect.width, H = rect.height;
+  var pad = {t: 14, r: 52, b: 28, l: 48};
+  var w = W - pad.l - pad.r, h = H - pad.t - pad.b;
+  var th = trendTheme();
+  var vis = trendVisible(data);
+  var n = data.length, i;
+
+  var showBest = false, showFinal = false, showOk = false;
+  for(var vk = 0; vk < vis.length; vk++){
+    if(vis[vk].key === 'best') showBest = true;
+    if(vis[vk].key === 'final') showFinal = true;
+    if(vis[vk].key === 'ok') showOk = true;
+  }
+  var maxDelay = 0, maxOk = 0;
+  for(i = 0; i < n; i++){
+    if(showBest && data[i].best > maxDelay) maxDelay = data[i].best;
+    if(showFinal && data[i].final > maxDelay) maxDelay = data[i].final;
+    if(showOk && data[i].ok > maxOk) maxOk = data[i].ok;
+  }
+  maxDelay = niceCeil(maxDelay * 1.15, false);
+  if(maxDelay < 100) maxDelay = 100;
+  maxOk = niceCeil(maxOk * 1.15, true);
+  if(maxOk < 4) maxOk = 4;
+
+  var xs = [], ys = {};
+  for(i = 0; i < n; i++){
+    xs.push(pad.l + (i / (n - 1)) * w);
+    ys.best = ys.best || [];
+    ys.final = ys.final || [];
+    ys.ok = ys.ok || [];
+    ys.best.push(pad.t + h - (data[i].best / maxDelay) * h);
+    ys.final.push(pad.t + h - (data[i].final / maxDelay) * h);
+    ys.ok.push(pad.t + h - (data[i].ok / maxOk) * h);
+  }
+  TREND.geom = {pad: pad, w: w, h: h, xs: xs, ys: ys};
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.textBaseline = 'alphabetic';
+
+  /* 网格 */
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = th.grid;
+  for(var g = 0; g <= 4; g++){
+    var gy = Math.round(pad.t + (g / 4) * h) + 0.5;
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + w, gy); ctx.stroke();
+  }
+  ctx.strokeStyle = th.vgrid;
+  for(i = 0; i < n; i++){
+    var gx = Math.round(xs[i]) + 0.5;
+    ctx.beginPath(); ctx.moveTo(gx, pad.t); ctx.lineTo(gx, pad.t + h); ctx.stroke();
+  }
+
+  /* 曲线区（入场生长动画用 clip） */
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, pad.l + w * prog + 12, H);
+  ctx.clip();
+
+  var s, arr, grad;
+  for(var k = 0; k < vis.length; k++){
+    s = vis[k];
+    arr = ys[s.key];
+    if(s.area){
+      grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + h);
+      grad.addColorStop(0, trendHex(s.color, s.key === 'ok' ? 0.16 : 0.20));
+      grad.addColorStop(1, trendHex(s.color, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      trendPath(ctx, xs, arr, pad.t + h);
+      ctx.fill();
+    }
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.w;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    if(s.dash) ctx.setLineDash(s.dash); else ctx.setLineDash([]);
+    ctx.beginPath();
+    trendPath(ctx, xs, arr, null);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /* 数据点 + 末端数值 */
+  for(var k2 = 0; k2 < vis.length; k2++){
+    s = vis[k2];
+    arr = ys[s.key];
+    var r = s.key === 'best' ? 3.4 : 3;
+    for(i = 0; i < n; i++){
+      if(i === TREND.hover) continue;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(xs[i], arr[i], r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(xs[i], arr[i], r, 0, Math.PI * 2); ctx.stroke();
+    }
+    var lastV = data[n - 1][s.key];
+    var txt = (s.unit === 'ms') ? (lastV + ' ms') : String(lastV);
+    trendBadge(ctx, xs[n - 1], arr[n - 1], txt, s.color, th, pad.l + w);
+  }
+  ctx.restore();
+
+  /* hover 准星 */
+  if(TREND.hover >= 0 && TREND.hover < n){
+    var hx = Math.round(xs[TREND.hover]) + 0.5;
+    ctx.strokeStyle = trendHex('#64748b', 0.5);
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(hx, pad.t); ctx.lineTo(hx, pad.t + h); ctx.stroke();
+    ctx.setLineDash([]);
+    for(var k3 = 0; k3 < vis.length; k3++){
+      s = vis[k3];
+      arr = ys[s.key];
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(xs[TREND.hover], arr[TREND.hover], 5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.arc(xs[TREND.hover], arr[TREND.hover], 5, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+
+  /* 轴标签 */
+  ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillStyle = th.axis;
+  var unitAbove = maxDelay >= 10000;
+  ctx.textAlign = 'right';
+  for(var g2 = 0; g2 <= 4; g2++){
+    var v = maxDelay * (1 - g2 / 4);
+    ctx.fillText(Math.round(v) + (g2 === 0 && !unitAbove ? ' ms' : ''), pad.l - 8, pad.t + (g2 / 4) * h + 4);
+  }
+  if(unitAbove) ctx.fillText('ms', pad.l - 8, pad.t - 3);
+  ctx.textAlign = 'left';
+  if(showOk){
+    for(var g3 = 0; g3 <= 4; g3++){
+      var v2 = Math.round(maxOk * (1 - g3 / 4));
+      ctx.fillText(g3 === 0 ? (v2 + ' 个') : String(v2), pad.l + w + 8, pad.t + (g3 / 4) * h + 4);
+    }
+  }
+
+  /* X 轴标签（按宽度抽稀；全部同一天时省略日期只显示时分） */
+  var sameDay = true;
+  for(i = 1; i < n; i++){
+    if(data[i].t.split(' ')[0] !== data[0].t.split(' ')[0]){ sameDay = false; break; }
+  }
+  ctx.textAlign = 'center';
+  var step = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(w / 78))));
+  for(i = 0; i < n; i += step){
+    ctx.fillText(sameDay ? data[i].t.split(' ')[1] : data[i].t, xs[i], pad.t + h + 17);
+  }
+  if((n - 1) % step !== 0){
+    ctx.fillText(sameDay ? data[n - 1].t.split(' ')[1] : data[n - 1].t, xs[n - 1], pad.t + h + 17);
+  }
+}
+
+function trendShowTip(i){
+  var tip = $id('trendTip'), body = $id('chartBody');
+  var data = TREND.data, g = TREND.geom;
+  if(!tip || !body || !data || !data[i] || !g) return;
+  var html = '<span class="tip-t">' + data[i].t + '</span>';
+  for(var k = 0; k < TREND_SERIES.length; k++){
+    var s = TREND_SERIES[k];
+    if(!trendSeriesHasData(data, s.key) || TREND.hidden[s.key]) continue;
+    var v = data[i][s.key];
+    html += '<div class="tip-r"><i style="background:' + s.color + '"></i><em>' + s.label +
+            '</em><b>' + v + (s.unit === 'ms' ? ' ms' : ' 个') + '</b></div>';
+  }
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  var yv = [];
+  for(var j = 0; j < TREND_SERIES.length; j++){
+    var key = TREND_SERIES[j].key;
+    if(g.ys[key] && trendSeriesHasData(data, key) && !TREND.hidden[key]) yv.push(g.ys[key][i]);
+  }
+  var top = yv.length ? Math.min.apply(null, yv) : g.pad.t;
+  tip.style.left = g.xs[i] + 'px';
+  tip.style.top = Math.max(4, top - 14) + 'px';
+}
+
+function trendTouch(e){
+  var cv = $id('trendCanvas');
+  if(!cv || !e.touches || !e.touches.length || !TREND.geom || TREND.data.length < 2) return;
+  var t = e.touches[0];
+  var rect = cv.getBoundingClientRect();
+  var x = t.clientX - rect.left;
+  var g = TREND.geom, n = TREND.data.length;
+  var i = Math.round((x - g.pad.l) / g.w * (n - 1));
+  if(i < 0) i = 0;
+  if(i > n - 1) i = n - 1;
+  if(i !== TREND.hover){ TREND.hover = i; drawTrendChart(TREND.data); }
+  trendShowTip(i);
+  if(e.type === 'touchmove' && e.cancelable) e.preventDefault();
+}
+
+function trendBind(){
+  if(TREND.bound) return;
+  var lg = $id('trendLegend'), cv = $id('trendCanvas');
+  if(!lg || !cv) return;
+  TREND.bound = true;
+
+  lg.addEventListener('click', function(e){
+    var el = e.target, item = null;
+    while(el && el !== lg){
+      if(el.className && String(el.className).indexOf('lg') >= 0){ item = el; break; }
+      el = el.parentNode;
+    }
+    if(!item) return;
+    var key = item.getAttribute('data-key');
+    if(!key) return;
+    TREND.hidden[key] = !TREND.hidden[key];
+    try{ localStorage.setItem('ocspeed_trend_hidden', JSON.stringify(TREND.hidden)); }catch(e){}
+    if(TREND.data.length) drawTrendChart(TREND.data);
+  });
+
+  cv.addEventListener('mousemove', function(e){
+    if(!TREND.geom || TREND.data.length < 2) return;
+    var rect = cv.getBoundingClientRect();
+    var x = e.clientX - rect.left;
+    var g = TREND.geom, n = TREND.data.length;
+    var i = Math.round((x - g.pad.l) / g.w * (n - 1));
+    if(i < 0) i = 0;
+    if(i > n - 1) i = n - 1;
+    if(i !== TREND.hover){ TREND.hover = i; drawTrendChart(TREND.data); }
+    trendShowTip(i);
+  });
+  cv.addEventListener('mouseleave', function(){
+    if(TREND.hover === -1) return;
+    TREND.hover = -1;
+    var tip = $id('trendTip');
+    if(tip) tip.style.display = 'none';
+    if(TREND.data.length) drawTrendChart(TREND.data);
+  });
+
+  /* 触屏：手指滑动查看各点数值，松手 3 秒后收起 */
+  cv.addEventListener('touchstart', trendTouch, false);
+  cv.addEventListener('touchmove', trendTouch, false);
+  cv.addEventListener('touchend', function(){
+    setTimeout(function(){
+      TREND.hover = -1;
+      var tip = $id('trendTip');
+      if(tip) tip.style.display = 'none';
+      if(TREND.data.length) drawTrendChart(TREND.data);
+    }, 3000);
+  }, false);
+}
+
+function trendAnimateIn(data){
+  var t0 = 0, dur = 650;
+  function step(now){
+    if(!t0) t0 = now;
+    var p = Math.min((now - t0) / dur, 1);
+    p = 1 - Math.pow(1 - p, 3);
+    drawTrendChart(data, p);
+    if(p < 1) TREND.raf = requestAnimationFrame(step);
+    else TREND.raf = null;
+  }
+  TREND.raf = requestAnimationFrame(step);
+}
+
+var _trendDrawOrig = drawTrendChart;
+drawTrendChart = function(data, p){
+  if(!TREND.animated && data && data.length >= 2 && typeof p !== 'number'){
+    TREND.animated = true;
+    TREND.data = data;
+    trendAnimateIn(data);
+    return;
+  }
+  _trendDrawOrig(data, p);
+};
+
+function refreshTrendChart(){
+  api(BASE + '/status', null, function(t){
+    var d = null; try{ d = JSON.parse(t); }catch(e){}
+    if(d && d.history){
+      TREND.fetchedAt = Date.now();
+      var cd = parseHistoryForChart(d.history);
+      drawTrendChart(cd);
+    }
+  });
+}
+/* 回到前台且趋势数据陈旧(>60s)时自动刷新 */
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState !== 'visible') return;
+  if(Date.now() - (TREND.fetchedAt || 0) > 60000) refreshTrendChart();
+});
+
+/* ========== 数字滚动动画 ========== */
+function animateNumber(el, target, suffix, duration){
+  if(!el) return;
+  var start = parseFloat(el.textContent) || 0;
+  if(isNaN(start)) start = 0;
+  var diff = target - start;
+  if(Math.abs(diff) < 0.5) { el.textContent = target + (suffix || ''); return; }
+  var t0 = performance.now();
+  function tick(now){
+    var p = Math.min((now - t0) / (duration || 600), 1);
+    p = 1 - Math.pow(1 - p, 3); // easeOutCubic
+    var cur = start + diff * p;
+    el.textContent = Math.round(cur) + (suffix || '');
+    if(p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ========== 卡片脉冲控制 ========== */
+function setCardsPulsing(on){
+  var cards = document.querySelectorAll('.card');
+  for(var i = 0; i < cards.length; i++){
+    if(on) cards[i].classList.add('pulsing');
+    else cards[i].classList.remove('pulsing');
+  }
+}
+
+/* ========== 增强 applyParts：数字滚动 + 脉冲控制 ========== */
+var _origApplyParts = applyParts;
+applyParts = function(d){
+  _origApplyParts(d);
+  // 数字滚动
+  var bestdEl = $id('bestd');
+  if(bestdEl){
+    var n = parseInt(String(bestdEl.textContent).replace(/[^\d]/g, ''), 10);
+    if(!isNaN(n)) animateNumber(bestdEl, n, ' ms', 500);
+  }
+  var candsEl = $id('cands');
+  if(candsEl){
+    var n2 = parseInt(String(candsEl.textContent).replace(/[^\d]/g, ''), 10);
+    if(!isNaN(n2)) animateNumber(candsEl, n2, '', 400);
+  }
+  // 刷新趋势图（/parts 不含 history，走 /status 拉取）
+  refreshTrendChart();
+};
+
+/* 脉冲同步已并入 poll 本体（原包装层导致每周期 2 次 /status，
+   且初始 schedulePoll 在包装前绑定原始 poll，脉冲时有时无） */
+
+/* ========== 窗口 resize 重绘趋势图 ========== */
+var trendResizeTimer = null;
+window.addEventListener('resize', function(){
+  if(trendResizeTimer) clearTimeout(trendResizeTimer);
+  trendResizeTimer = setTimeout(function(){
+    if(TREND.data && TREND.data.length >= 2) drawTrendChart(TREND.data);
+    else refreshTrendChart();
+  }, 200);
+});
+
+</script>
+</div>
+
+<%+footer%>
