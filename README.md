@@ -1,18 +1,40 @@
-# nros-panel
+# 鲲鹏 NRadio 系列路由器 一键恢复脚本
 
-鲲鹏无限 / NRadio C2000 Max（同系 C2000 U 亦可）OpenWrt 路由器的**一键恢复套件**。
+![GitHub Stars](https://img.shields.io/github/stars/h910056902/nros-panel.svg?style=flat&logo=appveyor&label=Stars&logo=github)
+![GitHub Forks](https://img.shields.io/github/forks/h910056902/nros-panel.svg?style=flat&logo=appveyor&label=Forks&logo=github)
 
-掉卡、overlay 被重置、固件重刷之后，一条命令把 **外网（OpenClash）+ Docker + 1Panel** 全部装回来。
+## 🤔 这是什么？
 
-- 适用：OpenWrt 21.02-SNAPSHOT · aarch64（cortex-a53）· kernel 5.4.281
+该项目可以让鲲鹏无限 / NRadio C2000 Max（同系 C2000 U 亦可）路由器在**不刷机**的情况下，
+一键把「外网 + Docker + 面板」整套装回来 —— 掉卡、overlay 被重置、固件重刷之后都能一条命令复原。<br><br>
+<img alt="Static Badge" src="https://img.shields.io/badge/%E5%9E%8B%E5%8F%B7-C2000%20Max-336666?style=flat-square&labelColor=000000">
+<img alt="Static Badge" src="https://img.shields.io/badge/%E5%9E%8B%E5%8F%B7-C2000%20U-D94600?style=flat-square&labelColor=000000">
+<img alt="Static Badge" src="https://img.shields.io/badge/%E7%B3%BB%E7%BB%9F-OpenWrt%2021.02-2828FF?style=flat-square&labelColor=000000">
+<img alt="Static Badge" src="https://img.shields.io/badge/%E5%86%85%E6%A0%B8-5.4.281-8A2BE2?style=flat-square&labelColor=000000">
+<img alt="Static Badge" src="https://img.shields.io/badge/%E6%9E%B6%E6%9E%84-aarch64-008B8B?style=flat-square&labelColor=000000">
+
+不用刷机、不用拆机、不用连电脑 —— SSH 上去一条命令。
+
+## 💡 特色功能
+
+- 🌏 支持 `一键恢复外网（OpenClash + Meta 内核 + 机场订阅）`
+- 🐋 支持 `一键部署 Docker 运行环境`（kmod 桩包补齐 / UCI 正确配置 / 镜像加速三源回退）
+- 🔑 支持 `一键安装 1Panel 面板`（凭据自动播种，端口避开固件占用）
+- 📊 支持 `一键安装 ocspeed 自动测速`（自建插件，opkg 源里根本没有）
+- 🗂️ 支持 `一键重建 TF 卡分区并扩容系统分区`（4G → 16G，卡上数据零丢失）
+- 🏪 支持 `一键注册进鲲鹏商店`（应用中心：1Panel / OpenClash / ocspeed）
+- 🩺 支持 `一键体检`（商店注册 / 路由补丁 / 页面可达，只读不改动）
+- 🎨 支持 `终端界面本地预览`（不上设备就能改版式）
+- 💻 支持 `手动分步执行`（不想用一键的按需单跑）
+- 💡 使用条件：鲲鹏无限 / NRadio 原厂固件，**无需刷机**
+- 鲲鹏 NRadio C2000 Max ✅
+- 鲲鹏 NRadio C2000 U ✅ 同系固件（21.02-SNAPSHOT · mt7987 私有内核 5.4.281）
 - 全程**幂等**：装好的不重装，中断了重跑同一条命令即可
 - 只依赖 busybox sh，不依赖 bash / tput / 数组
 
----
+## 🚀 快速上手
 
-## 一条命令
-
-SSH 进路由器（默认 `root` / `admin`），执行：
+### 1. SSH 连接到路由器，执行如下命令
 
 ```sh
 wget -qO /tmp/kp.sh https://raw.githubusercontent.com/h910056902/nros-panel/main/install.sh && sh /tmp/kp.sh
@@ -34,9 +56,12 @@ tail -f /tmp/kp-auto.log
 > 为什么一定要重启一次？因为 Docker 的 overlay2 驱动不能建在 overlayfs 之上，
 > `/overlay` 必须是一块独立分区；而 overlay 的切换只在开机早期完成，没法在线换。
 
-### 带参数
+### 上述命令如果下载失败——内地用户请使用 ⬇️
 
-参数写在命令前面，会被透传到子脚本：
+脚本内置了「curl/wget 双栈 + 三源回退」，一般无需干预。设备上 `curl` 直连
+`raw.githubusercontent.com` 会返回 `000`，**同一地址换 `wget` 就能拿到**。
+
+### 2. 带参数（写在命令前面，会透传到子脚本）
 
 ```sh
 # 顺带把机场订阅也配好
@@ -80,25 +105,7 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 | `NO_REBOOT` | `0` | `1` = 做完不自动重启，便于先核对卡上内容再手动 `reboot` |
 | `OVERLAY_SIZE` | `16G` | p1（系统可写层）容量，仅在重建时生效 |
 
----
-
-## 文件分工
-
-| 文件 | 作用 |
-|---|---|
-| `install.sh` | **入口**。引导器 + 流程编排：判断存储状态、迁移 overlay 内容、预置续跑钩子、决定是否重启 |
-| `kp-ui.sh` | **终端界面库**。所有输出格式都在这里，改界面只改它 |
-| `kp-install.sh` | **主脚本**。四阶段：预检换源 → OpenClash → Docker → 1Panel |
-| `kp-store-lib.sh` | **商店注册共享库**。`register_store` / `store_verify` / 占位包 / 承载页 / 路由补丁，`kp-install.sh` 与 `kp-ocspeed.sh` 共用一份 |
-| `kp-store-check.sh` | **注册体检**。逐项核对 1Panel / OpenClash / ocspeed 在商店里的注册、已安装判定与「打开」按钮 |
-| `ocspeed/` | ocspeed 的源码五件套。它不在任何 opkg 源里，只能从仓库拉 |
-| `kp-ocspeed.sh` | **自动测速插件**。OpenClash 之上自建的 ocspeed：全量测延迟 + 自动切最优节点 + LuCI 页面 + 商店注册 |
-| `kp-storage-init.sh` | **存储初始化**。TF 卡双分区 + f2fs（官方卷标）+ 写 fstab |
-| `kp-ui-preview.sh` | **界面预览**。本地跑一遍所有 UI 元素，不用上设备（开发用） |
-
-改界面、改参数、改流程逻辑，各改各的文件，互不影响。
-
-### 单独恢复 ocspeed（自动测速）
+### 3. 单独恢复 ocspeed（自动测速）
 
 ocspeed **不在任何 opkg 源里**，它跟着 overlay 走 —— 重建 TF 卡、换卡、扩容（`REBUILD=1`）
 之后 `/usr/libexec/openclash-helper/`、`/usr/lib/lua/luci/controller/ocspeed.lua`、
@@ -117,7 +124,7 @@ OCS_GROUP=宝贝云 OCS_RUN=1 SCRIPT=kp-ocspeed.sh sh /tmp/kp.sh
 统一维护 —— 别手工改 `/etc/crontabs/root`，改了下次启用会被重建覆盖。
 源码另有一份躺在数据盘 `/mnt/storage/data/ocspeed-backup/`，真断网时也能原地 `cp` 回来。
 
-### 注册进鲲鹏商店（原生面板 → 应用中心）
+### 4. 注册进鲲鹏商店（原生面板 → 应用中心）
 
 三个应用都会注册进去：**1Panel / OpenClash / ocspeed**。实现统一在 `kp-store-lib.sh`，
 谁要注册谁 source 它 —— 之前写在 `kp-install.sh` 里，ocspeed 要用就必然复制出第二份。
@@ -148,7 +155,60 @@ SCRIPT=kp-store-check.sh sh /tmp/kp.sh
   ✓ ocspeed：页面可达（HTTP 403）
 ```
 
-### Docker 的两个本机硬约束
+### 5. 手动分步执行（不想用一键）
+
+```sh
+# 1. 存储初始化（会清空整张卡，需重启生效）
+wget -qO /tmp/s.sh https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-storage-init.sh && sh /tmp/s.sh
+reboot
+
+# 2. 重启后装三大件（界面库必须和主脚本同目录，所以两个都要下载）
+cd /tmp
+wget -qO kp-ui.sh      https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-ui.sh
+wget -qO kp-install.sh https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-install.sh
+sh kp-install.sh
+```
+
+PC 兜底（设备上不了网时）：
+
+```sh
+pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
+```
+
+### 6. 改界面 / 本地预览
+
+所有输出都走 `kp-ui.sh`，改版式不用上设备：
+
+```sh
+UI_COLOR=always sh kp-ui-preview.sh
+```
+
+# Docker 面板的选择
+
+## 🔑 安装 1Panel 面板来管理 Docker 容器
+
+脚本 `[4/4]` 阶段自动完成，凭据写在 `/root/1panel-credentials.txt`（600 权限）。
+
+```
+安装位置  /mnt/storage/data/1panel      ← 放 p2 大分区，不吃 overlay
+数据根目录 /mnt/storage/data/docker     ← dockerd 的 Root Dir
+```
+
+- 默认端口：`10090`（10086/87/88 已被固件占用）
+- 默认账户：`admin`
+- 默认密码 / 入口：安装时随机生成，见 `/root/1panel-credentials.txt`
+- 安装日志：`logread | grep 1panel`
+
+### 访问地址
+
+```
+http://192.168.66.1:10090/<随机入口>
+```
+
+> **铁律：必须先写好 `/usr/local/bin/1pctl` 再启动 `1paneld`** —— 面板的数据库由首启播种，
+> 顺序反了就白装。脚本已封装，手装时注意别搞反。
+
+## 🔑 Docker 的两个本机硬约束
 
 1. **没有 veth**（厂商内核没编译，`kmod-veth` 是空包）。默认桥接网络会在建 veth pair 时
    直接失败：`operation not supported` —— 这是内核能力缺失，改 `daemon.json` 也没用。
@@ -163,11 +223,29 @@ Docker 阶段做的优化：数据目录预建（提前暴露「p2 没挂」）�
 
 ---
 
-## 主脚本的四个阶段
+## 🗂️ 文件分工
+
+| 文件 | 作用 |
+|---|---|
+| `install.sh` | **入口**。引导器 + 流程编排：判断存储状态、迁移 overlay 内容、预置续跑钩子、决定是否重启 |
+| `kp-ui.sh` | **终端界面库**。所有输出格式都在这里，改界面只改它 |
+| `kp-install.sh` | **主脚本**。四阶段：预检换源 → OpenClash → Docker → 1Panel |
+| `kp-store-lib.sh` | **商店注册共享库**。`register_store` / `store_verify` / 占位包 / 承载页 / 路由补丁，`kp-install.sh` 与 `kp-ocspeed.sh` 共用一份 |
+| `kp-store-check.sh` | **注册体检**。逐项核对 1Panel / OpenClash / ocspeed 在商店里的注册、已安装判定与「打开」按钮 |
+| `ocspeed/` | ocspeed 的源码五件套。它不在任何 opkg 源里，只能从仓库拉 |
+| `kp-ocspeed.sh` | **自动测速插件**。OpenClash 之上自建的 ocspeed：全量测延迟 + 自动切最优节点 + LuCI 页面 + 商店注册 |
+| `kp-storage-init.sh` | **存储初始化**。TF 卡双分区 + f2fs（官方卷标）+ 写 fstab |
+| `kp-ui-preview.sh` | **界面预览**。本地跑一遍所有 UI 元素，不用上设备（开发用） |
+
+改界面、改参数、改流程逻辑，各改各的文件，互不影响。
+
+---
+
+## ⚙️ 主脚本的四个阶段
 
 | 阶段 | 做什么 | 关键点 |
 |---|---|---|
-| `[1/4]` 预检与换源 | 修 opkg 源、确保 bash、建 `/tmp/lock`、兜底挂数据分区 | **出厂 6 个源全部指向已下线的 SNAPSHOT**，必须整体换（见下） |
+| `[1/4]` 预检与换源 | 修 opkg 源、确保 bash、建 `/tmp/lock`、兜底挂数据分区 | **出厂 6 个源全部指向已下线的 SNAPSHOT**，必须整体换（见硬事实 1） |
 | `[2/4]` OpenClash | 装包 → 拉内核 → **内核自检** → 配订阅 → 起服务 | 内核复用 `openclash_core.sh`，3 个 CDN 回退；**没有任何配置时会真把内核拉起来验一次活**（见硬事实 7） |
 | `[3/4]` Docker | 补 kmod 桩包 → 装包 → 写 **UCI** → 起服务 | data-root 必须落 p2，镜像源也只能写 UCI（见硬事实 5） |
 | `[4/4]` 1Panel | 装面板 → 播种凭据 → 验活 | **必须先写好 `1pctl` 再启动**（数据库由它播种） |
@@ -176,7 +254,7 @@ Docker 阶段做的优化：数据目录预建（提前暴露「p2 没挂」）�
 
 ---
 
-## 几个绕不开的硬事实
+## ⚠️ 几个绕不开的硬事实
 
 这一套脚本的很多"奇怪写法"，都是被下面几条逼出来的。改脚本前请先读这段。
 
@@ -386,7 +464,7 @@ mode: direct
 
 ---
 
-## 与厂商官方方案对齐（读固件源码得来）
+## 📐 与厂商官方方案对齐（读固件源码得来）
 
 固件自带了官方实现，位置在 `/usr/lib/lua/luci/controller/nradio_adv/sd.lua`
 （LuCI → 系统 → SD 卡 页面）。改本套件前建议先读它，几个关键点：
@@ -414,7 +492,7 @@ mode: direct
 
 ---
 
-## 界面规范
+## 🎨 界面规范
 
 所有输出都走 `kp-ui.sh`，脚本里**一行 `printf` 都不该有**。
 
@@ -444,29 +522,7 @@ UI_COLOR=always sh kp-ui-preview.sh
 
 ---
 
-## 手动分步执行（不想用一键）
-
-```sh
-# 1. 存储初始化（会清空整张卡，需重启生效）
-wget -qO /tmp/s.sh https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-storage-init.sh && sh /tmp/s.sh
-reboot
-
-# 2. 重启后装三大件（界面库必须和主脚本同目录，所以两个都要下载）
-cd /tmp
-wget -qO kp-ui.sh      https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-ui.sh
-wget -qO kp-install.sh https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-install.sh
-sh kp-install.sh
-```
-
-PC 兜底（设备上不了网时）：
-
-```sh
-pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
-```
-
----
-
-## 排错
+# 常见问题
 
 | 现象 | 原因 / 处理 |
 |---|---|
@@ -483,11 +539,13 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 | 7890 未监听 | 多半是订阅或内核还没就绪，去 LuCI → OpenClash 完成一次配置。**没配置文件时脚本不会空等**（旧版会白等 1 分钟） |
 | 面板端口未监听 | `logread \| grep 1panel`；端口冲突用 `PANEL_PORT=` 换一个 |
 | 卡识别不到 | 断电 30 秒 → 取出卡擦净金手指 → 重插到底（软件层无解：3.3V 是 fixed 稳压器，没软件开关） |
-| **某个阶段无任何报错就中断了** | 撞上 `set -e` 静默退出。三个脚本都装了 ERR 陷阱，会打印 `✗ 脚本在第 N 行中断（rc=）`；按行号看是不是 `X=$(cmd)` 少写了 `\|\| X=""`（见下） |
+| **某个阶段无任何报错就中断了** | 撞上 `set -e` 静默退出。五个脚本都装了 `EXIT` 中断陷阱，会打印 `✗ 脚本中断（rc=）- 上面最后一行输出就是线索`；**它不给行号**，线索是倒数第二行输出。多半是 `X=$(cmd)` 少写了 `\|\| X=""`（见下） |
 
 ### 改脚本前必读：`set -e` 会静默退出
 
-三个脚本都开了 `set -eu`。`set -e` 下**任何命令返回非 0 都会让脚本无声退出**。
+五个脚本都开了 `set -eu`（只读体检脚本 `kp-store-check.sh` 刻意只开 `set -u`，
+诊断工具不该因为哪个查询返回非 0 就自己退出）。
+`set -e` 下**任何命令返回非 0 都会让脚本无声退出**。
 本套件已经踩过两次，两条规则：
 
 1. **禁用 `cmd && break` / `[ x ] && {...}`** —— 条件为假时整条 AND-list 返回非 0，直接退出。
@@ -495,13 +553,19 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 2. **每个 `X=$(cmd)` 后面都跟 `|| X=""`** —— 纯赋值语句的退出码 = 命令替换的退出码。
    典型凶手：`uci -q get <未设置的键>` 返回 1
 
-三个脚本头部都有这道防线（让中断不再无声）：
+四个脚本头部都有这道防线（让中断不再无声）：
 
 ```sh
-trap 'rc=$?; echo "  ✗ 脚本在第 $LINENO 行中断（rc=$rc）" >&2' ERR || :
+trap 'rc=$?; [ "$rc" = 0 ] || echo "  ✗ 脚本中断（rc=$rc）—— 上面最后一行输出就是线索" >&2' EXIT
 ```
 
-（`|| :` 不能省，否则陷阱自身返回非 0 会再次触发。）
+两个细节：
+
+- **busybox ash 不认 `ERR`，只能用 `EXIT`**（`ERR` 陷阱在 ash 里根本不会触发，
+  写了等于没写）
+- **不能在 trap 里裸写 `echo`** —— `EXIT` 陷阱正常退出时也会执行，
+  裸 `echo` 会让每次成功运行都多打一行"中断"，看起来像失败。
+  必须先判 `[ "$rc" = 0 ] ||`（真实踩过）
 
 ### 改完脚本要等 CDN 缓存过期再验
 
@@ -511,12 +575,12 @@ trap 'rc=$?; echo "  ✗ 脚本在第 $LINENO 行中断（rc=$rc）" >&2' ERR ||
 
 ```sh
 wget -qO /tmp/_p.sh https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-install.sh
-grep -cF 'ERR || :' /tmp/_p.sh     # 返回 1 说明已是新版
+grep -cF "' EXIT" /tmp/_p.sh     # 返回 1 说明已是新版（陷阱已写好）
 ```
 
 ---
 
-## 已知边界
+## 🚧 已知边界
 
 - **容器只能用 host 网络**：内核没编 veth，`docker run` 加默认 bridge 会直接报
   `failed to add the host <=> sandbox (veth...) pair interfaces: operation not supported`。
@@ -527,3 +591,44 @@ grep -cF 'ERR || :' /tmp/_p.sh     # 返回 1 说明已是新版
 - **992MB 内存**：跑 Jellyfin 这类应用前先确认 `/config` 和 `/cache` 都在卡上，别落 overlay
 - **删容器别用 `docker system prune -a`**：会误删没有运行容器的镜像
 - **docker 数据目录别放回 `/opt/docker`**：那在 4G 系统分区里，几个镜像就满了（见硬事实 5）
+
+## 📋 规划稿
+
+- [`docs/failover-plan.md`](docs/failover-plan.md) —— ocspeed 故障转移增强方案（v3.4 待实施）。
+  现状：`failover_enable=0`，节点故障后最坏要等 30 分钟靠全量测速兜底。
+
+---
+
+## 🗂️ 引用项目
+
+本项目的开发参照了以下项目，感谢这些开源项目的作者：
+
+### OpenClash
+
+https://github.com/vernesong/OpenClash
+
+### mihomo（Clash.Meta）
+
+https://github.com/MetaCubeX/mihomo
+
+### 1Panel
+
+https://github.com/1Panel-dev/1Panel
+
+### istore
+
+https://github.com/linkease/istore
+
+### gl-inet-onescript（本 README 版式参照）
+
+https://github.com/wukongdaily/gl-inet-onescript
+
+---
+
+## 💰 支持作者 💰
+
+如果这套脚本帮你省下了找包、修源、反复试错的时间，欢迎请作者喝杯咖啡。
+
+> 把收款码图片放到 `docs/qr.png`，再取消下面这行的注释即可显示。
+
+<!-- <img src="docs/qr.png" width="30%" /> -->
