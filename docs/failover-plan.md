@@ -119,10 +119,17 @@ L1|日本03|中转|流媒体|4x        L1|日本03|直连|流媒体|2x
 uci set ocspeed.main.failover_enable=1
 uci set ocspeed.main.backup_enable=1
 uci commit ocspeed
-/usr/libexec/openclash-helper/speedswitch.sh cron
+/usr/libexec/openclash-helper/speedswitch.sh enable
 ```
 
-`cron_apply` 会自动补齐 `#ocspeed-failover`（每分钟）与 `#ocspeed-backup`（每分钟自检间隔）两条。
+> ⚠️ **`speedswitch.sh` 没有 `cron` 子命令**（会打 usage 并 `rc=1`）。可用子命令只有
+> `run | test | testnode | switchnode | nodes | status | enable | disable | failover | backup |
+> backupnow | backupjson | progress` —— **只有 `enable` / `disable` 会调用 `cron_apply`**
+> （前者顺带把 `ocspeed.main.enabled` 置 1）。
+
+`cron_apply` 按开关补齐三段：`#ocspeed-auto`（每 `interval` 分钟）、`#ocspeed-failover`
+（每分钟）、`#ocspeed-backup`（每分钟；脚本内部按 `backup_interval` 自检是否真跑）。
+注意 `backup_enable` 是 **`!= 0` 即启用**（默认就开），只有显式设成 `0` 才关。
 
 **P0-2 本地链路对照探针（新增判据，最关键的一个）**
 
