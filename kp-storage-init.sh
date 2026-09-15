@@ -115,32 +115,34 @@ ui_stage_end
 # ============================ [4/4] 写 fstab ============================
 ui_stage 4 4 "写入 fstab（开机自动挂载）"
 
-# 找一个已存在的 fstab mount 段；没有就新建一个
-# 用法：mount_index /overlay  →  回显该 target 对应的索引
+# 找出已存在的 fstab mount 段，没有就回显空。
+# 注意：这里刻意不用 sed —— target 值里带 "/"，会把 sed 的 / 分隔符撞坏，
+# 导致静默失败（实测 rc=1 且无输出），进而给 /overlay 建出重复条目。
+# 厂商固件本来就预置了一条 /overlay 条目（enabled=0），这里要复用它、只把开关打开。
 mount_index() {
-  uci show fstab 2>/dev/null \
-    | sed -n "s/^fstab\.\(@mount\[[0-9]*\]\)\.target='$1'$/\1/p" | head -n1
+  i=0
+  while t=$(uci -q get "fstab.@mount[$i].target" 2>/dev/null); do
+    if [ "$t" = "$1" ]; then echo "@mount[$i]"; return 0; fi
+    i=$((i + 1))
+  done
+  return 0
 }
 
-# --- p1 → /overlay ---
-IDX=$(mount_index /overlay)
-if [ -z "$IDX" ]; then uci -q add fstab mount >/dev/null; IDX='@mount[-1]'; fi
-uci -q set "fstab.$IDX.device=$P1"
-uci -q set "fstab.$IDX.target=/overlay"
-uci -q set "fstab.$IDX.fstype=f2fs"
-uci -q set "fstab.$IDX.enabled=1"
-uci -q set "fstab.$IDX.enabled_fsck=0"
-ui_ok "$P1 → /overlay"
+# 确保 target 有且只有一条启用的挂载项。用法：set_mount <target> <device>
+set_mount() {
+  IDX=$(mount_index "$1")
+  if [ -z "$IDX" ]; then uci -q add fstab mount >/dev/null; IDX='@mount[-1]'; fi
+  uci -q set "fstab.$IDX.device=$2"
+  uci -q set "fstab.$IDX.target=$1"
+  uci -q set "fstab.$IDX.fstype=f2fs"
+  uci -q set "fstab.$IDX.ignore_uuid=1"   # 换卡后 fs UUID 会变，按设备名匹配即可
+  uci -q set "fstab.$IDX.enabled=1"
+  uci -q set "fstab.$IDX.enabled_fsck=0"
+  ui_ok "$2 → $1"
+}
 
-# --- p2 → DATA_DIR ---
-IDX=$(mount_index "$DATA_DIR")
-if [ -z "$IDX" ]; then uci -q add fstab mount >/dev/null; IDX='@mount[-1]'; fi
-uci -q set "fstab.$IDX.device=$P2"
-uci -q set "fstab.$IDX.target=$DATA_DIR"
-uci -q set "fstab.$IDX.fstype=f2fs"
-uci -q set "fstab.$IDX.enabled=1"
-uci -q set "fstab.$IDX.enabled_fsck=0"
-ui_ok "$P2 → $DATA_DIR"
+set_mount /overlay    "$P1"
+set_mount "$DATA_DIR" "$P2"
 
 uci commit fstab
 mkdir -p "$DATA_DIR"
