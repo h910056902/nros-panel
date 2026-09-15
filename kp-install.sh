@@ -1,0 +1,401 @@
+#!/bin/sh
+# ============================================================================
+#  kp-install.sh —— 鲲鹏 NRadio 路由器一键恢复
+#                   外网(OpenClash) + Docker + 1Panel
+#
+#  适用：OpenWrt 21.02-SNAPSHOT / aarch64 / kernel 5.4.281（C2000 Max、C2000 U）
+#
+#  特性：幂等。已装好的组件只做「确保运行 + 回读凭据」，不重装、不覆盖配置，
+#        所以随时可以重跑，也可以分阶段跑。
+#
+#  用法：
+#     sh kp-install.sh                            全套安装
+#     SUB_URL=https://xxx sh kp-install.sh        同时配置机场订阅
+#     SKIP=docker,panel sh kp-install.sh          只装外网
+#     PANEL_PORT=10091 sh kp-install.sh           换面板端口
+#     CORE_TYPE=Meta sh kp-install.sh             换内核类型
+#
+#  四个阶段（想改哪块，就找对应函数）：
+#     [1/4] 预检与换源   修 opkg 源（出厂 SNAPSHOT 源已 404）
+#     [2/4] OpenClash    装包 → 拉内核 → 配订阅 → 起服务
+#     [3/4] Docker       装依赖 → 写 daemon.json → 起服务
+#     [4/4] 1Panel       装面板 → 播种凭据 → 验活
+#     跑完打印汇总（汇总不是阶段，没有编号）
+#
+#  依赖：同目录下的 kp-ui.sh（终端界面库，改界面只改那个文件）
+# ============================================================================
+set -eu
+
+# ============================== 参数（环境变量可覆盖） ==============================
+: "${SUB_URL:=}"                              # 机场订阅地址，留空 = 只装不订阅
+: "${SUB_NAME:=kp}"                           # 订阅显示名
+: "${SUB_UA:=clash-verge/v2.4.5}"             # 订阅请求 UA
+: "${CORE_TYPE:=Meta}"                        # 内核类型 Meta/Dev/Smart/Oix
+: "${OC_VER:=0.47.156}"                       # OpenClash 版本
+: "${OC_LOCAL_IPK:=/tmp/oc.ipk}"              # 优先用这个本地 ipk，没有才联网下
+: "${PANEL_PORT:=10090}"                      # 面板端口（10086/87/88 已被固件占用）
+: "${PANEL_DIR:=/mnt/storage/data}"           # 数据根目录（放 p2 大分区，不吃 overlay）
+: "${PANEL_USER:=admin}"
+: "${PANEL_PASS:=}"                           # 留空 = 随机生成
+: "${PANEL_ENT:=}"                            # 面板入口路径，留空 = 随机生成
+: "${ONEPANEL_VER:=v1.10.34-lts}"
+: "${SKIP:=}"                                 # 逗号分隔要跳过的阶段：oc,docker,panel
+: "${CRED:=/root/1panel-credentials.txt}"     # 凭据落盘位置
+
+# 派生变量
+BASE=$PANEL_DIR/1panel
+DB=$BASE/db/1Panel.db
+TMP=$PANEL_DIR/kp-tmp
+DIR="1panel-$ONEPANEL_VER-linux-arm64"
+PKG="$DIR.tar.gz"
+PANEL_DL="https://resource.fit2cloud.com/1panel/package/stable/$ONEPANEL_VER/release"
+OC_IPK_URL="https://github.com/vernesong/OpenClash/releases/download/v$OC_VER/luci-app-openclash_${OC_VER}_all.ipk"
+LAN_IP=$(uci -q get network.lan.ipaddr 2>/dev/null || echo 192.168.66.1)
+OC_CORE=/etc/openclash/core/clash_meta
+ALI=https://mirrors.aliyun.com/openwrt/releases/21.02.7/packages/aarch64_cortex-a53
+
+# ============================== 界面（全部实现在 kp-ui.sh） ==============================
+KP_DIR=${0%/*}; [ "$KP_DIR" = "$0" ] && KP_DIR=.     # 取脚本所在目录，不依赖 dirname
+if [ ! -f "$KP_DIR/kp-ui.sh" ]; then
+  echo "缺少界面库 kp-ui.sh —— 它必须和本脚本放在同一个目录里" >&2
+  exit 1
+fi
+. "$KP_DIR/kp-ui.sh"
+
+AVAIL=$(df -h "$PANEL_DIR" 2>/dev/null | awk 'NR==2{print $4}')
+ui_init "鲲鹏路由器 · 一键恢复" "外网 OpenClash  ·  Docker  ·  1Panel"
+ui_meta 设备 "$(cat /tmp/sysinfo/model 2>/dev/null || echo Unknown) · $(uname -m) · kernel $(uname -r)"
+if [ -n "$AVAIL" ]; then ui_meta 数据 "$PANEL_DIR · 可用 $AVAIL"
+else ui_meta 数据 "$PANEL_DIR（未挂载）"; fi
+ui_meta 时间 "$(date '+%F %T')"
+ui_hr
+
+# ============================== 工具函数 ==============================
+have()  { command -v "$1" >/dev/null 2>&1; }
+skip()  { case ",$SKIP," in *",$1,"*) return 0 ;; esac; return 1; }
+rnd()   { head -c 32 /dev/urandom | md5sum | cut -c1-"$1"; }
+port()  { netstat -lnt 2>/dev/null | grep -q ":$1 "; }
+
+# 轮询等待：poll 30 docker info  →  最多等 30 次（每次 2s）
+poll()  { n=$1; shift; while [ "$n" -gt 0 ]; do "$@" >/dev/null 2>&1 && return 0; n=$((n-1)); sleep 2; done; return 1; }
+
+# 装包（已装则跳过），天然幂等
+pkg()   { opkg status "$1" 2>/dev/null | grep -q 'install ok installed' && return 0; opkg install "$@"; }
+
+# 下载：curl 优先，wget 兜底
+get()   { if have curl; then curl -fsSL -m 600 -o "$2" "$1"; else wget -q -T 600 -O "$2" "$1"; fi; }
+
+# GitHub 直连不稳，直链 + 两个镜像前缀依次尝试
+mirrors() { echo "$1"; echo "https://ghfast.top/$1"; echo "https://gh-proxy.com/$1"; }
+
+# 从 1pctl 回读真实凭据。1Panel 首启是用 1pctl 里的值播种数据库的，
+# 所以 1pctl 是凭据的唯一真相源（值里的 \ 是转义符，要还原）
+pv()    { sed -n "s/^$1=//p" /usr/local/bin/1pctl 2>/dev/null | head -n1 | sed 's/\\//g'; }
+
+# 同步鲲鹏应用商店的 JSON 注册表（有 installed.list 才做）
+sync_store() {
+  [ -f /etc/kp_store/installed.list ] || return 0
+  lua -e '
+    local c, t = require "luci.jsonc", {}
+    for l in io.lines("/etc/kp_store/installed.list") do
+      local p = {}
+      for v in l:gmatch("[^|]+") do p[#p+1] = v end
+      if #p >= 9 then t[#t+1] = { id=p[1], name=p[2], pkg=p[3], ver=p[4], ts=p[5],
+        route=p[6] == "-" and "" or p[6], source=p[7], des=p[8],
+        open_url=p[9] == "-" and "" or p[9] } end
+    end
+    io.open("/etc/kp_store/plugins.json","w"):write(c.stringify(t))' 2>/dev/null \
+    || ui_warn "plugins.json 同步失败（不影响使用）"
+}
+
+# ============================== [1/4] 预检与换源 ==============================
+stage_env() {
+  ui_stage 1 4 "环境预检与换源"
+
+  [ "$(id -u)" = 0 ] || ui_fail "必须以 root 运行"
+  [ "$(uname -m)" = aarch64 ] || ui_fail "仅支持 aarch64，当前是 $(uname -m)"
+  grep -q " $PANEL_DIR " /proc/mounts || ui_fail "数据分区 $PANEL_DIR 未挂载" "先跑 kp-storage-init.sh，再 reboot"
+  for t in curl tar gzip md5sum sha256sum; do have "$t" || ui_fail "缺少工具 $t"; done
+
+  # 1) 换源。出厂 distfeeds 的 6 个源全部指向 downloads.openwrt.org 的
+  #    21.02-SNAPSHOT，而该快照早已下线 —— 实测 v4 / v6 / 固定 IP 直连全是
+  #    000，连 bash 都装不上。整体换成阿里云 21.02.7 镜像。
+  #    只留 base / packages / routing 三个：core 与 target 源里是严格对齐
+  #    内核 5.4.281 的 kmod，而官方根本没有 mt7987 这个 target，留着不但
+  #    取不到东西，还会让每次 opkg update 卡在超时上。真缺 kmod 依赖时，
+  #    用 --force-depends 跳过（本机用不到 veth / br_netfilter，见 Docker 段）。
+  F=/etc/opkg/distfeeds.conf
+  [ -f "$F.kp-bak" ] || cp "$F" "$F.kp-bak"          # 只备份一次，方便还原
+  if grep -q "21.02-SNAPSHOT" "$F"; then
+    cat > "$F" <<EOF
+src/gz openwrt_base     $ALI/base
+src/gz openwrt_packages $ALI/packages
+src/gz openwrt_routing  $ALI/routing
+EOF
+    ui_info "6 个出厂源已整体换成阿里云 21.02.7（原文件备份：$F.kp-bak）"
+  fi
+  # 第三方 ipk（OpenClash 等）没有官方签名，关掉校验免得装不上
+  sed -i '/check_signature/d' /etc/opkg.conf 2>/dev/null || :
+
+  opkg update >/dev/null 2>&1 || ui_warn "opkg update 有源失败（通常无碍，继续）"
+  ui_ok "opkg 源就绪"
+
+  # 2) bash：1pctl 与 OpenClash 的脚本都依赖它
+  pkg bash >/dev/null 2>&1 || ui_fail "bash 安装失败"
+  # 3) OpenClash 系列脚本用 flock 锁，缺 /tmp/lock 会静默失败
+  mkdir -p /tmp/lock
+  ui_ok "aarch64 · bash 就绪 · $PANEL_DIR 可用 $(df -h "$PANEL_DIR" | awk 'NR==2{print $4}')"
+  ui_stage_end
+}
+
+# ============================== [2/4] 外网 OpenClash ==============================
+stage_openclash() {
+  ui_stage 2 4 "外网 OpenClash"
+  if skip oc; then ui_info "按 SKIP 跳过"; ui_stage_end; return 0; fi
+
+  CHANGED=0
+
+  # --- 装包：优先本地 ipk（离线可用），否则联网下载（直链+2 镜像） ---
+  if [ -x /etc/init.d/openclash ]; then
+    ui_ok "包已安装（$(opkg status luci-app-openclash 2>/dev/null | sed -n 's/^Version: //p')）"
+  else
+    if [ ! -s "$OC_LOCAL_IPK" ]; then
+      for u in $(mirrors "$OC_IPK_URL"); do get "$u" "$OC_LOCAL_IPK" && break || :; done
+    fi
+    [ -s "$OC_LOCAL_IPK" ] || ui_fail "OpenClash 下载失败" "手动下载 ipk 放到 $OC_LOCAL_IPK 后重跑"
+    # 依赖里的 luci-compat / kmod-tun 等，固件其实自带（只是 opkg 库里查不到
+    # 记录：prec 探测显示 kmod-tun、iptables 这类"未装"但命令和模块都在），
+    # 所以必须 --force-depends，否则 opkg 会以「依赖不满足」直接拒装。
+    opkg install --force-depends "$OC_LOCAL_IPK" || ui_fail "OpenClash 安装失败"
+    CHANGED=1
+    ui_ok "包已安装"
+  fi
+
+  # --- 内核：用 OpenClash 自带的下载器（含版本探测、解压、赋权）---
+  #     第 2 个参数是 GitHub 加速前缀，0 = 官方直连
+  if [ ! -x "$OC_CORE" ] && [ -x /usr/share/openclash/openclash_core.sh ]; then
+    ui_info "拉取内核 $CORE_TYPE（约 46MB）…"
+    for m in 0 https://gh-proxy.com/ https://ghfast.top/; do
+      bash /usr/share/openclash/openclash_core.sh "$CORE_TYPE" "$m" >/dev/null 2>&1 || continue
+      if [ -x "$OC_CORE" ]; then CHANGED=1; break; fi
+    done
+  fi
+  if [ -x "$OC_CORE" ]; then
+    ui_ok "内核 $("$OC_CORE" -v 2>/dev/null | awk '{print $2, $3}') · $CORE_TYPE"
+  else
+    ui_warn "内核缺失：到 LuCI → OpenClash → 内核管理 下载，或检查 github_address_mod"
+  fi
+
+  # --- 订阅：写进 UCI，然后调 OpenClash 自带脚本拉取 ---
+  if [ -n "$SUB_URL" ] && ! uci show openclash 2>/dev/null | grep -qF "$SUB_URL"; then
+    uci add openclash config_subscribe >/dev/null
+    uci set openclash.@config_subscribe[-1].name="$SUB_NAME"
+    uci set openclash.@config_subscribe[-1].address="$SUB_URL"
+    uci set openclash.@config_subscribe[-1].sub_ua="$SUB_UA"
+    uci set openclash.@config_subscribe[-1].enabled=1
+    uci commit openclash
+    CHANGED=1
+    ui_ok "订阅「$SUB_NAME」已写入"
+  elif [ -z "$SUB_URL" ]; then
+    ui_warn "未提供订阅地址：内核就绪后，到 LuCI → OpenClash 里填订阅即可"
+  fi
+
+  # --- 起服务 ---
+  /etc/init.d/openclash enable
+  if [ "$CHANGED" = 1 ]; then
+    /etc/init.d/openclash restart >/dev/null 2>&1 || /etc/init.d/openclash start
+    poll 60 port 7890 || ui_warn "7890 未监听（通常是订阅或内核还没就绪，去 LuCI 完成一次配置）"
+    # 服务起来后主动拉一次订阅，确保配置文件落地
+    [ -x /usr/share/openclash/openclash.sh ] && bash /usr/share/openclash/openclash.sh >/dev/null 2>&1 || :
+  else
+    /etc/init.d/openclash status 2>/dev/null | grep -q '^running' || /etc/init.d/openclash start
+    poll 30 port 7890 || ui_warn "7890 未监听"
+  fi
+
+  # --- 没指定用哪份配置时，自动指向第一份 yaml ---
+  if [ -z "$(uci -q get openclash.config.config_path)" ]; then
+    Y=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1)
+    if [ -n "$Y" ]; then
+      uci set openclash.config.config_path="$Y"
+      uci commit openclash
+      /etc/init.d/openclash restart >/dev/null 2>&1 || :
+      ui_ok "已指定配置 $(basename "$Y")"
+    fi
+  fi
+
+  # --- ocspeed 自动测速：脚本是固件自带的，这里只补 3 条 cron ---
+  if [ -x /usr/libexec/openclash-helper/speedswitch.sh ] \
+     && ! grep -q speedswitch /etc/crontabs/root 2>/dev/null; then
+    cat >> /etc/crontabs/root <<'EOF'
+*/30 * * * * /usr/libexec/openclash-helper/speedswitch.sh run >>/var/log/ocspeed.log 2>&1
+* * * * * /usr/libexec/openclash-helper/speedswitch.sh failover >>/var/log/ocspeed.log 2>&1
+* * * * * /usr/libexec/openclash-helper/speedswitch.sh backup >>/var/log/ocspeed.log 2>&1
+EOF
+    ui_ok "ocspeed 自动测速 cron 已补"
+  fi
+  /etc/init.d/cron enable 2>/dev/null || :
+  /etc/init.d/cron restart 2>/dev/null || :
+
+  OC_STAT=$(/etc/init.d/openclash status 2>/dev/null | head -n1)
+  if port 7890; then ui_ok "服务 $OC_STAT · 代理端口 7890 已监听"; else ui_ok "服务 $OC_STAT"; fi
+  ui_stage_end
+}
+
+# ============================== [3/4] Docker ==============================
+stage_docker() {
+  ui_stage 3 4 "Docker"
+  if skip docker; then ui_info "按 SKIP 跳过"; ui_stage_end; return 0; fi
+
+  if ! have docker; then
+    # kmod 一律不装：本机内核没编 veth / br_netfilter，承载这些 kmod 的
+    # target 源又随 SNAPSHOT 一起下线了。我们走 host 网络 + bridge none，
+    # 用不到它们 —— 依赖检查用 --force-depends 跳过即可。
+    pkg dockerd || pkg --force-depends dockerd || ui_fail "dockerd 安装失败"
+    pkg docker  || pkg --force-depends docker  || ui_fail "docker 安装失败"
+  fi
+  pkg docker-compose >/dev/null 2>&1 || ui_warn "docker-compose 缺失：面板能用，但商店部署应用会失败"
+  pkg zoneinfo-asia  >/dev/null 2>&1 || :
+
+  # daemon.json 已存在就不动（1Panel 官方脚本会把它覆盖成单镜像源，别让它得逞）
+  if [ ! -f /etc/docker/daemon.json ]; then
+    mkdir -p /etc/docker
+    cat > /etc/docker/daemon.json <<EOF
+{
+  "data-root": "$PANEL_DIR/docker",
+  "storage-driver": "overlay2",
+  "bridge": "none",
+  "iptables": false,
+  "log-level": "warn",
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" },
+  "registry-mirrors": ["https://docker.1ms.run", "https://docker.m.daocloud.io"]
+}
+EOF
+    ui_ok "daemon.json 已写入（host 网络优先，overlay2 落在 $PANEL_DIR/docker）"
+  elif [ "${DOCKER_ENABLE_BRIDGE:-0}" = 1 ] && grep -q '"iptables" *: *false' /etc/docker/daemon.json; then
+    # 需要端口映射才开：会建 docker 防火墙区，并把 bridge/iptables 打开
+    cp /etc/docker/daemon.json /etc/docker/daemon.json.kp_bak   # 备份必须在修改之前
+    /etc/init.d/dockerd stop >/dev/null 2>&1 || :
+    /etc/init.d/dockerd uciadd >/dev/null 2>&1 || ui_warn "uciadd 失败（docker 防火墙区未建）"
+    sed -i -e '/"bridge"/d' -e 's/"iptables" *: *false/"iptables": true/' /etc/docker/daemon.json
+    ui_ok "已切网桥模式（原配置备份在 daemon.json.kp_bak）"
+  fi
+
+  # 让 dockerd 用我们这份配置：init 只认 alt_config_file 的软链，直接写文件是无效的
+  [ "$(uci -q get dockerd.globals.alt_config_file)" = /etc/docker/daemon.json ] || {
+    uci set dockerd.globals.alt_config_file='/etc/docker/daemon.json'
+    uci commit dockerd
+  }
+
+  docker info >/dev/null 2>&1 || { /etc/init.d/dockerd enable; /etc/init.d/dockerd start; }
+  poll 30 docker info || ui_fail "dockerd 未就绪" "看 logread | grep dockerd 排查"
+  ui_ok "dockerd $(docker version --format '{{.Server.Version}}' 2>/dev/null) · $(docker info --format '{{.Driver}}' 2>/dev/null)"
+  ui_stage_end
+}
+
+# ============================== [4/4] 1Panel ==============================
+stage_panel() {
+  ui_stage 4 4 "1Panel"
+  if skip panel; then ui_info "按 SKIP 跳过"; ui_stage_end; return 0; fi
+
+  if [ -f "$DB" ] && have 1pctl; then
+    # 已装：从 1pctl 回读真实凭据（重新生成会把凭据文件写坏、探测 404）
+    PANEL_PORT=$(pv ORIGINAL_PORT)
+    PANEL_USER=$(pv ORIGINAL_USERNAME)
+    PANEL_ENT=$(pv ORIGINAL_ENTRANCE)
+    PANEL_PASS=$(pv ORIGINAL_PASSWORD)
+    [ -n "$PANEL_ENT" ] && [ -n "$PANEL_PORT" ] || ui_fail "1pctl 读不到入口/端口，安装状态异常"
+    ui_ok "已安装，回读凭据：端口 $PANEL_PORT · 入口 $PANEL_ENT"
+  else
+    [ -n "$PANEL_PASS" ] || PANEL_PASS=$(rnd 12)
+    [ -n "$PANEL_ENT" ]  || PANEL_ENT=$(rnd 10)
+    if port "$PANEL_PORT"; then ui_fail "端口 $PANEL_PORT 被占用" "用 PANEL_PORT=xxxx 换一个端口重跑"; fi
+
+    # 下载 → 校验 → 解包
+    mkdir -p "$TMP"; cd "$TMP"
+    get "$PANEL_DL/checksums.txt" checksums.txt || ui_fail "checksums.txt 下载失败"
+    SUM=$(grep " $PKG\$" checksums.txt | cut -d' ' -f1)
+    [ -n "$SUM" ] || ui_fail "checksums.txt 里找不到 $PKG"
+    if [ ! -f "$PKG" ]; then get "$PANEL_DL/$PKG" "$PKG" || ui_fail "1Panel 安装包下载失败"; fi
+    if [ "$(sha256sum "$PKG" | cut -d' ' -f1)" != "$SUM" ]; then
+      rm -f "$PKG"; ui_fail "安装包 SHA256 校验不匹配" "损坏包已删除，重跑即可重下"
+    fi
+    rm -rf "$BASE" "$DIR"; tar zxf "$PKG"; cd "$DIR"
+    ui_ok "安装包已解压并通过 SHA256 校验"
+
+    # 落文件。关键顺序：先写好 1pctl，再启动服务 ——
+    # 1panel 二进制会读 1pctl 里的 BASE_DIR/ORIGINAL_* 来播种数据库。
+    mkdir -p /usr/local/bin
+    cp 1panel 1pctl /usr/local/bin/
+    chmod +x /usr/local/bin/1panel /usr/local/bin/1pctl
+    ln -sf /usr/local/bin/1panel /usr/bin/1panel
+    ln -sf /usr/local/bin/1pctl  /usr/bin/1pctl
+    ESC_PW=$(echo "$PANEL_PASS" | sed 's/[!@#$%*_,.?]/\\\\&/g')   # 按 1pctl 的转义规则处理
+    sed -i -e "s|^BASE_DIR=.*|BASE_DIR=$PANEL_DIR|" \
+           -e "s|^ORIGINAL_PORT=.*|ORIGINAL_PORT=$PANEL_PORT|" \
+           -e "s|^ORIGINAL_USERNAME=.*|ORIGINAL_USERNAME=$PANEL_USER|" \
+           -e "s|^ORIGINAL_PASSWORD=.*|ORIGINAL_PASSWORD=$ESC_PW|" \
+           -e "s|^ORIGINAL_ENTRANCE=.*|ORIGINAL_ENTRANCE=$PANEL_ENT|" \
+           -e "s|^LANGUAGE=.*|LANGUAGE=zh|" /usr/local/bin/1pctl
+    mkdir -p "$BASE/geo"; cp -f GeoIP.mmdb "$BASE/geo/" 2>/dev/null || :
+    rm -rf /usr/local/bin/lang            # 先删再拷，否则会嵌套成 lang/lang
+    cp -r lang /usr/local/bin/lang
+    cp initscript/1paneld.procd /etc/init.d/1paneld && chmod +x /etc/init.d/1paneld
+    /etc/init.d/1paneld enable || ui_warn "1paneld 开机自启未生效"
+    cp -rf initscript "$BASE/"
+    cd /; rm -rf "$TMP/$DIR" "$TMP/$PKG" "$TMP/checksums.txt"
+    ui_ok "文件就位，凭据已播种"
+  fi
+
+  # 起服务并验活
+  /etc/init.d/1paneld status 2>/dev/null | grep -q '^running' || /etc/init.d/1paneld start
+  poll 30 port "$PANEL_PORT" || ui_fail "面板端口 $PANEL_PORT 未监听" "看 logread | grep 1panel 排查"
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 8 "http://127.0.0.1:$PANEL_PORT/$PANEL_ENT")
+  [ "$CODE" = 200 ] || ui_fail "面板 HTTP 返回 $CODE（期望 200）"
+  ! skip docker && { docker info >/dev/null 2>&1 || ui_fail "docker info 失败"; } || :
+  ui_ok "面板 HTTP 200 · docker 就绪"
+
+  # 凭据落盘（600 权限，只有 root 能读）
+  umask 077
+  cat > "$CRED" <<EOF
+# 1Panel 安装信息（$(date '+%F %T')）
+版本:     $ONEPANEL_VER
+地址:     http://$LAN_IP:$PANEL_PORT/$PANEL_ENT
+用户名:   $PANEL_USER
+密码:     $PANEL_PASS
+数据目录: $BASE
+服务管理: /etc/init.d/1paneld {start|stop|restart|status}
+命令行:   1pctl {status|user-info|version|update|reset|uninstall}
+EOF
+  chmod 600 "$CRED"
+  ui_ok "凭据写入 $CRED"
+
+  # 注册到鲲鹏应用商店（没有 kp_store 就跳过）
+  if [ -f /etc/kp_store/installed.list ] && ! grep -q '^1panel|' /etc/kp_store/installed.list; then
+    echo "1panel|1Panel 管理面板|docker|$ONEPANEL_VER|$(date +%s)|-|docker|容器/应用/文件/监控运维面板|http://$LAN_IP:$PANEL_PORT/$PANEL_ENT" \
+      >> /etc/kp_store/installed.list
+    sync_store
+    ui_ok "已注册鲲鹏应用商店入口"
+  fi
+  ui_stage_end
+}
+
+# ============================== 汇总（不是阶段） ==============================
+stage_summary() {
+  ui_done
+  [ -n "${OC_STAT:-}" ] && ui_kv 外网 "$OC_STAT"
+  if ! skip panel && [ -n "${PANEL_ENT:-}" ]; then
+    ui_kv 面板 "http://$LAN_IP:$PANEL_PORT/$PANEL_ENT"
+    ui_kv 账号 "$PANEL_USER / $PANEL_PASS"
+    ui_kv 凭据 "$CRED"
+  fi
+  ui_hr2
+}
+
+# ============================== 主流程 ==============================
+# 每个阶段一个函数，按顺序跑，出错即停（ui_fail 会 exit 1）。
+stage_env
+stage_openclash
+stage_docker
+stage_panel
+stage_summary
