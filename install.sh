@@ -14,7 +14,10 @@
 #      PANEL_PORT=10091           换 1Panel 端口
 #      OVERLAY_SIZE=8G            换系统分区大小（默认 16G；重新分区时才生效，
 #                                 需配合 FORCE=1 走重建流程）
-#      FORCE=1                    卡上确实有数据，也要重建
+#      FORCE=1                    卡上确实有数据，也要重建（给 kp-storage-init 的安全闸放行）
+#      REBUILD=1                  强制走「重建 TF 卡」流程 —— 存储明明是好的也要
+#                                 推倒重来（换 OVERLAY_SIZE / 换分区方案时用），
+#                                 自动蕴含 FORCE=1，清空卡后重启自动续跑安装
 #      NO_REBOOT=1                做完不自动重启，便于人工核对后再手动 reboot
 #      SCRIPT=kp-install.sh       只跑指定脚本（跳过自动判断）
 #
@@ -165,6 +168,13 @@ run() {
 echo ">>> nros-panel · 鲲鹏路由器一键恢复"
 clear_auto
 
+# REBUILD=1：无视「存储已就绪」，强制走重建流程（重新分区 / 改分区大小时用）。
+# 它天然蕴含 FORCE=1 —— kp-storage-init 的安全闸需要它才肯对在用的卡动手。
+if [ "${REBUILD:-0}" = 1 ]; then
+  export FORCE=1
+  echo "  ! REBUILD=1：强制重建 TF 卡（卡上全部数据将被清空）"
+fi
+
 # 指定了脚本：跳过自动判断，直接执行
 if [ -n "${SCRIPT:-}" ]; then
   echo "  · 指定脚本：$SCRIPT"
@@ -172,7 +182,9 @@ if [ -n "${SCRIPT:-}" ]; then
   exit 0
 fi
 
-if [ "$(awk '$2=="/overlay"{print $1}' /proc/mounts)" = "${DISK}p1" ]; then
+# REBUILD=1 时不看就绪状态，直接落到重建分支
+if [ "${REBUILD:-0}" != 1 ] \
+   && [ "$(awk '$2=="/overlay"{print $1}' /proc/mounts)" = "${DISK}p1" ]; then
   # ---------- 存储就绪：直接安装 ----------
   # 判据刻意用「/overlay 是不是由这张卡的 p1 承载」，而不是「/mnt/storage/data
   # 挂上了没」。后者不可靠：固件热插拔会把数据分区先挂到 /tmp/storage/<设备名>，
