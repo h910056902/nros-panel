@@ -12,6 +12,8 @@
 #  可调参数（写在命令前面即可，例如 PANEL_PORT=10091 sh /tmp/kp.sh）：
 #      SUB_URL=https://机场订阅   顺带把订阅也配好
 #      PANEL_PORT=10091           换 1Panel 端口
+#      OVERLAY_SIZE=8G            换系统分区大小（默认 16G；重新分区时才生效，
+#                                 需配合 FORCE=1 走重建流程）
 #      FORCE=1                    卡上确实有数据，也要重建
 #      NO_REBOOT=1                做完不自动重启，便于人工核对后再手动 reboot
 #      SCRIPT=kp-install.sh       只跑指定脚本（跳过自动判断）

@@ -6,7 +6,7 @@
 #      卡正常工作时脚本会自己拦下来（除非 FORCE=1）。
 #
 #  分区规划（以 29G 卡为例）：
-#     p1   4G     f2fs  →  /overlay              系统可写层（装软件、存 LuCI 配置）
+#     p1   16G    f2fs  →  /overlay              系统可写层（装软件、存 LuCI 配置）
 #     p2   剩余   f2fs  →  /mnt/storage/data     Docker 数据 / 媒体文件
 #
 #  为什么要分两块：Docker 的 overlay2 存储驱动不能建在 overlayfs 之上，
@@ -30,7 +30,10 @@ set -eu
 
 # ---------------------------- 可调参数（一般不用改） ----------------------------
 : "${DISK:=/dev/mmcblk0}"              # TF 卡设备节点
-: "${OVERLAY_SIZE:=4G}"                # p1 容量，系统可写层够用即可
+: "${OVERLAY_SIZE:=16G}"               # p1 容量。16G 的依据：整机全装满（OpenClash
+                                        # 内核 46MB + docker 全家 130MB + 1Panel 200MB
+                                        # + 各类 opkg 包）也到不了 1G，16G 已是 16 倍
+                                        # 冗余；再大就是从 Docker 数据那边抢空间了。
 : "${DATA_DIR:=/mnt/storage/data}"     # p2 挂载点，Docker 数据放这里
 
 P1="${DISK}p1"
