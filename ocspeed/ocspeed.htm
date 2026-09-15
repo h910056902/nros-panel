@@ -5,55 +5,87 @@
 /* ==========================================================================
    Modern Network Control Dashboard - Clean Engineering Aesthetic (No AI Slop)
    ========================================================================== */
-:root {
-  --bg-canvas: transparent;
-  --bg-card: #ffffff;
-  --bg-subtle: #f8fafc;
-  --bg-muted: #f1f5f9;
-  
-  --border-light: #e2e8f0;
-  --border-subtle: #edf2f7;
-  --border-focus: #0284c7;
-  
-  --text-main: #0f172a;
-  --text-body: #334155;
-  --text-muted: #64748b;
-  --text-sub: #94a3b8;
-  
-  --brand-primary: #0284c7;
-  --brand-hover: #0369a1;
-  --brand-active: #075985;
-  --brand-light: #f0f9ff;
-  --brand-ring: rgba(2, 132, 199, 0.18);
-  
-  --status-ok: #059669;
-  --status-ok-bg: #ecfdf5;
-  --status-ok-border: #a7f3d0;
-  
-  --status-warn: #d97706;
-  --status-warn-bg: #fffbeb;
-  --status-warn-border: #fde68a;
-  
-  --status-bad: #dc2626;
-  --status-bad-bg: #fef2f2;
-  --status-bad-border: #fecaca;
+/* ==========================================================================
+   设计令牌 —— Linear 深色精密风（dark-mode-native）
+   固件外壳本来就是深色（nradio 主题 body #111111），这里把页面做成同一介质，
+   而不是在深色壳里贴白卡片。三个来源：
+     · 层次    —— 不用阴影，用「白色不透明度台阶」表达高度（0.02 → 0.03 → 0.05）
+     · 分隔    —— 一律半透明白发丝线，禁用实心深色描边（深色底上看不见）
+     · 强调色  —— 收敛到固件主题的青 #00D5FF 一族（换成品红/靛蓝会跟外壳打架）
+   令牌挂在 .ocspeed-body 上而不是 :root —— 避免污染外层 LuCI 框架的配色。
+   ========================================================================== */
+.ocspeed-body {
+  --bg-canvas: transparent;              /* 透出外壳的 #111111，页面无缝嵌入 */
+  --bg-solid: #16171a;                   /* 需要不透明的极少数场景（遮住下方线条） */
+  --bg-card: rgba(255, 255, 255, 0.02);
+  --bg-subtle: rgba(255, 255, 255, 0.03);
+  --bg-muted: rgba(255, 255, 255, 0.05);
+  --bg-hover: rgba(255, 255, 255, 0.07);
+  --bg-inset: rgba(0, 0, 0, 0.28);
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-focus: #00d5ff;
+
+  --text-main: #f7f8f8;                  /* 不用纯白，减轻深色底上的眼疲劳 */
+  --text-body: #d0d6e0;
+  --text-muted: #8a8f98;
+  --text-sub: #62666d;
+
+  --brand-primary: #00d5ff;
+  --brand-hover: #6ee3ff;
+  --brand-active: #00aeff;
+  --brand-light: rgba(0, 213, 255, 0.10);
+  --brand-ring: rgba(0, 213, 255, 0.22);
+  --on-brand: #04222b;                   /* 高亮底上的文字用近黑，不用纯白 */
+
+  --status-ok: #10b981;
+  --status-ok-bg: rgba(16, 185, 129, 0.10);
+  --status-ok-border: rgba(16, 185, 129, 0.28);
+
+  --status-warn: #f59e0b;
+  --status-warn-bg: rgba(245, 158, 11, 0.10);
+  --status-warn-border: rgba(245, 158, 11, 0.28);
+
+  --status-bad: #f87171;
+  --status-bad-bg: rgba(248, 113, 113, 0.10);
+  --status-bad-border: rgba(248, 113, 113, 0.28);
+
+  /* 深色底上阴影几乎不可见 → 主要靠亮度台阶，阴影只留极轻的一层垫底 */
+  --shadow-sm: none;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --font-ui: Inter, "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "JetBrains Mono", monospace;
 }
 
 .ocspeed-body {
   background: var(--bg-canvas);
   color: var(--text-body);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-ui);
+  /* cv01 / ss03 是 Inter 的几何替代字形 —— Linear 的字体身份就靠它 */
+  font-feature-settings: "cv01", "ss03";
   padding: 16px 20px;
   max-width: 1160px;
   margin: 0 auto;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 所有数字一律等宽对齐 —— 延迟/耗时列跳动会让整个表格显得廉价 */
+.ocspeed-body .card .big,
+.ocspeed-body .pb-pct,
+.ocspeed-body .dv,
+.ocspeed-body .pb-el,
+.ocspeed-body .bk-item b {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 /* ---- 顶部导航栏 ---- */
@@ -82,9 +114,9 @@
 
 .ocspeed-body h1 {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-main);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;      /* 大字号收紧字距：Inter 的"工程感"来源 */
   margin: 0;
   display: inline-flex;
   align-items: center;
@@ -93,13 +125,14 @@
 
 .ocspeed-body .ver {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--brand-primary);
   background: var(--brand-light);
-  border: 1px solid #bae6fd;
+  border: 1px solid rgba(0, 213, 255, 0.25);
   padding: 1px 7px;
   border-radius: 999px;
   letter-spacing: 0;
+  font-family: var(--font-mono);
 }
 
 .ocspeed-body .live {
@@ -160,7 +193,7 @@
 
 .ocspeed-body .pill.run .dot {
   background: var(--status-ok);
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
 }
 
 /* 现代化开关 Toggle Switch */
@@ -183,7 +216,7 @@
   position: relative;
   width: 32px;
   height: 18px;
-  background: #cbd5e1;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   transition: background 0.2s ease;
   display: inline-block;
@@ -197,9 +230,9 @@
   left: 2px;
   width: 14px;
   height: 14px;
-  background: #ffffff;
+  background: #eceef1;
   border-radius: 50%;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.45);
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -263,11 +296,14 @@
 }
 
 .ocspeed-body .card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
 }
 
+/* 主卡：左侧一道 2px 强调线 + 极轻的顶部青色渐变，表示"这是当前生效的" */
 .ocspeed-body .card.p0 {
-  border-left: 3px solid var(--brand-primary);
+  border-left: 2px solid var(--brand-primary);
+  background: linear-gradient(180deg, rgba(0, 213, 255, 0.055) 0%, rgba(255, 255, 255, 0.02) 100%);
 }
 
 .ocspeed-body .card .k {
@@ -278,6 +314,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* 卡片角标（ACTIVE / FASTEST / LATENCY …）走 Linear 的微标签规格：
+   10px、加字距、次级灰 —— 只做定位，不抢数字的视线 */
+.ocspeed-body .card .k .muted {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-sub);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .ocspeed-body .card .v {
@@ -294,9 +340,10 @@
 
 .ocspeed-body .card .big {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.1;
-  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  letter-spacing: -0.02em;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text-main);
 }
@@ -324,6 +371,7 @@
 .ocspeed-body .card .sub .ok {
   color: var(--status-ok);
   background: var(--status-ok-bg);
+  border: 1px solid var(--status-ok-border);
   padding: 1px 7px;
   border-radius: var(--radius-sm);
 }
@@ -331,6 +379,7 @@
 .ocspeed-body .card .sub .muted {
   color: var(--text-muted);
   background: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
   padding: 1px 7px;
   border-radius: var(--radius-sm);
 }
@@ -339,8 +388,8 @@
   animation: cardFlash 0.6s ease-out;
 }
 @keyframes cardFlash {
-  0% { background: #f0fdf4; }
-  100% { background: var(--bg-card); }
+  0% { background: rgba(16, 185, 129, 0.14); }
+  100% { background: rgba(255, 255, 255, 0.02); }
 }
 
 /* 备用节点卡 */
@@ -390,8 +439,8 @@
 }
 
 .ocspeed-body .bk-item:hover {
-  background: #ffffff;
-  border-color: #cbd5e1;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .ocspeed-body .bk-item i {
@@ -403,14 +452,15 @@
   height: 18px;
   border-radius: 4px;
   background: var(--brand-primary);
-  color: #ffffff;
+  color: var(--on-brand);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   font-style: normal;
 }
 
 .ocspeed-body .bk-item.r2 i, .ocspeed-body .bk-item.r3 i {
-  background: #64748b;
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--text-body);
 }
 
 .ocspeed-body .bk-item .nm {
@@ -464,37 +514,51 @@
   background: var(--bg-card);
   color: var(--text-main);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
+  border-radius: 6px;                 /* Linear 功能元素统一 6px，不用全局小圆角 */
   padding: 6px 14px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .ocspeed-body button:hover {
-  background: var(--bg-subtle);
-  border-color: #cbd5e1;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-main);
 }
 
 .ocspeed-body button:active {
   transform: translateY(1px);
 }
 
+.ocspeed-body button:focus-visible {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+
 .ocspeed-body button.primary {
   background: var(--brand-primary);
   border: 1px solid var(--brand-primary);
-  color: #ffffff;
+  color: var(--on-brand);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(0, 213, 255, 0.18), 0 2px 8px rgba(0, 213, 255, 0.18);
 }
 
 .ocspeed-body button.primary:hover {
   background: var(--brand-hover);
   border-color: var(--brand-hover);
-  color: #ffffff;
+  color: var(--on-brand);
+}
+
+.ocspeed-body button.primary:disabled {
+  box-shadow: none;
 }
 
 .ocspeed-body button.mini {
@@ -528,10 +592,13 @@
   background: var(--bg-muted);
 }
 
+/* 选中态不再"反色成实心白块"——深色体系里那是刺眼的。
+   改用抬一档的底色 + 发丝描边，和 Linear 的 pill 规格一致。 */
 .ocspeed-body .fbtn.active {
-  background: var(--text-main);
-  color: #ffffff;
-  font-weight: 600;
+  background: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--border-strong);
+  font-weight: 500;
 }
 
 .ocspeed-body a.fbtn {
@@ -555,7 +622,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  background: #ffffff;
+  background: transparent;      /* 深色底上表格不该是独立色块 */
 }
 
 .ocspeed-body th, .ocspeed-body td {
@@ -566,12 +633,12 @@
 }
 
 .ocspeed-body th {
-  color: var(--text-muted);
-  font-weight: 600;
-  font-size: 11.5px;
+  color: var(--text-sub);
+  font-weight: 500;
+  font-size: 11px;
   background: var(--bg-subtle);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.07em;
   user-select: none;
 }
 
@@ -613,7 +680,7 @@
 }
 
 .ocspeed-body .node-row:hover td {
-  background: #f1f8fe;
+  background: rgba(0, 213, 255, 0.055);
 }
 
 .ocspeed-body .node-row.junk {
@@ -672,21 +739,29 @@
   border: 1px solid transparent;
 }
 
-.chip.ln { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
-.chip.rg-xx { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
-.chip.rg-sg { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
-.chip.rg-jp { background: #fdf2f8; color: #9d174d; border-color: #fbcfe8; }
-.chip.rg-us { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
-.chip.rg-hk, .chip.rg-tw { background: #fffbeb; color: #92400e; border-color: #fde68a; }
-.chip.rg-kr { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; }
-.chip.rg-ru { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-.chip.rg-eu { background: #f0fdfa; color: #115e59; border-color: #99f6e4; }
-.chip.rg-cn { background: #fff1f2; color: #9f1239; border-color: #fecdd3; }
-.chip.relay { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
-.chip.direct { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
-.chip.media { background: #faf5ff; color: #6b21a8; border-color: #e9d5ff; }
-.chip.mul { background: #f8fafc; color: #334155; border-color: #cbd5e1; }
-.chip.feat { background: #fdf4ff; color: #86198f; border-color: #f5d0fe; }
+/* 标签配色：浅色粉彩在深色底上会糊成一片 → 换成「低饱和同色底 + 亮色文字 +
+   半透明同色描边」。色相语义保持不变（新加坡=绿、日本=粉、美=靛…），只调明度。
+   顺带把选择器收进 .ocspeed-body，原来这几个是全局的，会漏到外层 LuCI 框架。 */
+.ocspeed-body .chip.ln,
+.ocspeed-body .chip.rg-xx,
+.ocspeed-body .chip.mul {
+  background: rgba(255, 255, 255, 0.06);
+  color: #b6bcc6;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+.ocspeed-body .chip.rg-sg { background: rgba(16, 185, 129, 0.14);  color: #6ee7b7; border-color: rgba(16, 185, 129, 0.28); }
+.ocspeed-body .chip.rg-jp { background: rgba(244, 114, 182, 0.14); color: #f9a8d4; border-color: rgba(244, 114, 182, 0.28); }
+.ocspeed-body .chip.rg-us { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; border-color: rgba(129, 140, 248, 0.28); }
+.ocspeed-body .chip.rg-hk,
+.ocspeed-body .chip.rg-tw { background: rgba(245, 158, 11, 0.14);  color: #fcd34d; border-color: rgba(245, 158, 11, 0.28); }
+.ocspeed-body .chip.rg-kr { background: rgba(56, 189, 248, 0.14);  color: #7dd3fc; border-color: rgba(56, 189, 248, 0.28); }
+.ocspeed-body .chip.rg-ru { background: rgba(248, 113, 113, 0.14); color: #fca5a5; border-color: rgba(248, 113, 113, 0.28); }
+.ocspeed-body .chip.rg-eu { background: rgba(45, 212, 191, 0.14);  color: #5eead4; border-color: rgba(45, 212, 191, 0.28); }
+.ocspeed-body .chip.rg-cn { background: rgba(251, 113, 133, 0.14); color: #fda4af; border-color: rgba(251, 113, 133, 0.28); }
+.ocspeed-body .chip.relay  { background: rgba(251, 146, 60, 0.14);  color: #fdba74; border-color: rgba(251, 146, 60, 0.28); }
+.ocspeed-body .chip.direct { background: rgba(34, 197, 94, 0.14);   color: #86efac; border-color: rgba(34, 197, 94, 0.28); }
+.ocspeed-body .chip.media  { background: rgba(192, 132, 252, 0.14); color: #d8b4fe; border-color: rgba(192, 132, 252, 0.28); }
+.ocspeed-body .chip.feat   { background: rgba(232, 121, 249, 0.14); color: #f0abfc; border-color: rgba(232, 121, 249, 0.28); }
 
 /* 搜索框 */
 .ocspeed-body .searchbox {
@@ -743,16 +818,16 @@
 .ocspeed-body .pb.done .pb-dot {
   background: var(--status-ok);
   animation: none;
-  box-shadow: 0 0 6px rgba(22, 163, 74, 0.45);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.55);
 }
 .ocspeed-body .pb.stall .pb-dot {
   background: var(--status-warn);
   animation-duration: 3s;
 }
 @keyframes pbDotPulse {
-  0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.35); }
-  70% { box-shadow: 0 0 0 7px rgba(2, 132, 199, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(0, 213, 255, 0.40); }
+  70% { box-shadow: 0 0 0 7px rgba(0, 213, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 213, 255, 0); }
 }
 
 .ocspeed-body .pb-spacer { flex: 1; }
@@ -776,19 +851,19 @@
 /* 轨道：10px + 内阴影；末端滑块圆点 */
 .ocspeed-body .pb-track {
   position: relative;
-  background: var(--bg-muted);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 999px;
-  height: 10px;
+  height: 8px;
   overflow: visible;
-  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.10);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
 .ocspeed-body .pb-fill {
   height: 100%;
   width: 0;
   border-radius: 999px;
-  background: linear-gradient(90deg, #0369a1, var(--brand-primary) 55%, #22b8cf);
-  box-shadow: 0 0 10px rgba(2, 132, 199, 0.35);
+  background: linear-gradient(90deg, #0091b3, var(--brand-primary) 60%, #7ae8ff);
+  box-shadow: 0 0 12px rgba(0, 213, 255, 0.40);
 }
 
 .ocspeed-body #pbarKnob {
@@ -796,24 +871,24 @@
   top: 50%;
   left: 0%;
   transform: translate(-50%, -50%);
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: #fff;
+  background: #0b0c0e;
   border: 3px solid var(--brand-primary);
-  box-shadow: 0 1px 5px rgba(2, 132, 199, 0.45);
+  box-shadow: 0 0 10px rgba(0, 213, 255, 0.55);
   box-sizing: border-box;
   z-index: 2;
 }
 
 .ocspeed-body .pb.done .pb-fill {
-  background: linear-gradient(90deg, #15803d, var(--status-ok));
-  box-shadow: 0 0 10px rgba(22, 163, 74, 0.30);
+  background: linear-gradient(90deg, #0d9668, var(--status-ok) 60%, #4ade80);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
 }
 
 .ocspeed-body .pb.done #pbarKnob {
   border-color: var(--status-ok);
-  box-shadow: 0 1px 5px rgba(22, 163, 74, 0.45);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.55);
 }
 
 .ocspeed-body .pb.done .pb-pct {
@@ -853,7 +928,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--bg-card);
+  background: var(--bg-solid);   /* 必须不透明，否则会透出背后的连线 */
   border: 2px solid var(--border-light);
   box-sizing: border-box;
   transition: all 0.2s ease;
@@ -896,9 +971,9 @@
   animation: stPulse 1.6s ease-out infinite;
 }
 @keyframes stPulse {
-  0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.30); }
-  70% { box-shadow: 0 0 0 7px rgba(2, 132, 199, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(0, 213, 255, 0.35); }
+  70% { box-shadow: 0 0 0 7px rgba(0, 213, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 213, 255, 0); }
 }
 
 /* 横幅 (Banners) */
@@ -917,25 +992,25 @@
 .ocspeed-body .banner.ok {
   background: var(--status-ok-bg);
   border-color: var(--status-ok-border);
-  color: #065f46;
+  color: #6ee7b7;
 }
 
 .ocspeed-body .banner.info {
   background: var(--brand-light);
-  border-color: #bae6fd;
-  color: #0369a1;
+  border-color: rgba(0, 213, 255, 0.25);
+  color: var(--brand-primary);
 }
 
 .ocspeed-body .banner.warn {
   background: var(--status-warn-bg);
   border-color: var(--status-warn-border);
-  color: #92400e;
+  color: #fcd34d;
 }
 
 .ocspeed-body .banner.err {
   background: var(--status-bad-bg);
   border-color: var(--status-bad-border);
-  color: #991b1b;
+  color: #fca5a5;
 }
 
 .ocspeed-body .banner .bsub {
@@ -1080,18 +1155,19 @@
 
 /* 终端/日志 (Console Log) */
 .ocspeed-body pre {
-  background: #090d16;
-  border: 1px solid #1e293b;
-  border-radius: var(--radius-sm);
+  background: #08090a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   font-size: 11.5px;
-  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
-  color: #cbd5e1;
+  font-family: var(--font-mono);
+  color: #b6bcc6;
   max-height: 280px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
-  line-height: 1.6;
+  line-height: 1.65;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 .ocspeed-body pre::-webkit-scrollbar {
@@ -1099,8 +1175,11 @@
   height: 6px;
 }
 .ocspeed-body pre::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(255, 255, 255, 0.14);
   border-radius: 999px;
+}
+.ocspeed-body pre::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .ocspeed-body .lgd {
@@ -1122,8 +1201,8 @@
 }
 .ocspeed-body .lgd i.g { background: #10b981; }
 .ocspeed-body .lgd i.y { background: #f59e0b; }
-.ocspeed-body .lgd i.r { background: #ef4444; }
-.ocspeed-body .lgd i.c { background: #38bdf8; }
+.ocspeed-body .lgd i.r { background: #f87171; }
+.ocspeed-body .lgd i.c { background: #00d5ff; }
 .ocspeed-body .lgd i.v { background: #a855f7; }
 
 .ocspeed-body .empty {
@@ -1274,7 +1353,7 @@
   left: -40%;
   width: 40%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
   animation: shimmer 1.8s ease-in-out infinite;
 }
 @keyframes shimmer {
@@ -1287,8 +1366,8 @@
   animation: cardPulse 1.6s ease-in-out infinite;
 }
 @keyframes cardPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); border-color: var(--border-light); }
-  50% { box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.12); border-color: rgba(2, 132, 199, 0.4); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 213, 255, 0); border-color: var(--border-light); }
+  50% { box-shadow: 0 0 0 4px rgba(0, 213, 255, 0.10); border-color: rgba(0, 213, 255, 0.35); }
 }
 
 /* ========== 数字滚动容器 ========== */
@@ -1327,8 +1406,8 @@
   animation: breathe 2s ease-in-out infinite;
 }
 @keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.15); }
-  50% { box-shadow: 0 0 0 5px rgba(5, 150, 105, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.18); }
+  50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
 }
 
 /* ========== 切换过渡色 ========== */
@@ -1375,6 +1454,371 @@
 /* 卡片内的节点名同样处理 */
 .ocspeed-body .card .v.c-node {
   line-height: 1.6;
+}
+
+/* ==========================================================================
+   精修层 —— Linear 的收尾规格
+   （放在最后统一覆盖，前面的功能规则一行没删，回归风险最小）
+   ========================================================================== */
+
+/* 面板：Linear 的大面板用 12px 圆角，顶部一道极淡的高光让它"浮"起来 */
+.ocspeed-body .panel,
+.ocspeed-body details.cfg {
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028) 0%, rgba(255, 255, 255, 0.015) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.ocspeed-body .chart-wrap {
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028) 0%, rgba(255, 255, 255, 0.015) 100%);
+}
+
+/* 面板标题：字重降到 600 以内，字距收紧，和 Linear 的 Heading 3 一致 */
+.ocspeed-body .ph b {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.ocspeed-body .chart-head {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* 表格容器：8px 圆角 + 发丝描边，横滚时不再"切边" */
+.ocspeed-body .tw {
+  border-radius: var(--radius-md);
+  border-color: var(--border-subtle);
+}
+.ocspeed-body .tw::-webkit-scrollbar,
+.ocspeed-body .tw.scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.ocspeed-body .tw::-webkit-scrollbar-thumb,
+.ocspeed-body .tw.scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.ocspeed-body .tw::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.20);
+}
+.ocspeed-body .tw::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ocspeed-body .tw.scroll thead th {
+  background: #16171a;      /* 吸顶表头必须不透明，否则滚动时内容会透过去 */
+  box-shadow: 0 1px 0 var(--border-light);
+}
+
+/* 延迟条：底衬透明度在深色底上要抬一点才看得见 */
+.ocspeed-body .dvbar { opacity: 0.26; }
+.ocspeed-body .dvbar.x { opacity: 0.12; }
+.ocspeed-body .dvt { letter-spacing: -0.01em; }
+
+/* 延迟分级文字色（Lua 只给类名 g/y/r/x，颜色在这里定；JS 未装饰到的格子靠它兜底） */
+.ocspeed-body td.d.g, .ocspeed-body .dvt.g { color: var(--status-ok); }
+.ocspeed-body td.d.y, .ocspeed-body .dvt.y { color: var(--status-warn); }
+.ocspeed-body td.d.r, .ocspeed-body .dvt.r { color: var(--status-bad); }
+.ocspeed-body td.d.x, .ocspeed-body .dvt.x { color: var(--text-sub); }
+
+/* 节点状态列（可用 / 失效 / 假节点）—— 原来写在 Lua 里的颜色搬到这里 */
+.ocspeed-body .st-ok   { color: var(--status-ok); font-weight: 500; }
+.ocspeed-body .st-dead { color: var(--status-bad); font-weight: 500; }
+.ocspeed-body .st-fake { color: var(--text-sub); }
+
+/* 备用节点卡里的延迟数字 */
+.ocspeed-body .bk-item b.g { color: var(--status-ok); }
+.ocspeed-body .bk-item b.y { color: var(--status-warn); }
+.ocspeed-body .bk-item b.r { color: var(--status-bad); }
+
+/* 延迟刻度图例 */
+.ocspeed-body .scale {
+  background: var(--bg-card);
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 设置区 */
+.ocspeed-body .subhead {
+  color: var(--brand-primary);
+  border-bottom-style: solid;
+  border-bottom-color: var(--border-subtle);
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+.ocspeed-body .form label {
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
+}
+.ocspeed-body .form input:focus,
+.ocspeed-body .form textarea:focus,
+.ocspeed-body .searchbox input:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-ring);
+  background: rgba(255, 255, 255, 0.04);
+}
+.ocspeed-body .form input,
+.ocspeed-body .form textarea,
+.ocspeed-body .searchbox input {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--border-light);
+  border-radius: 6px;
+}
+.ocspeed-body .form input::placeholder,
+.ocspeed-body .searchbox input::placeholder {
+  color: var(--text-sub);
+}
+.ocspeed-body details.cfg summary {
+  border-radius: var(--radius-lg);
+}
+.ocspeed-body details.cfg[open] summary {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* 空状态 */
+.ocspeed-body .empty {
+  color: var(--text-sub);
+}
+
+/* 选中文字用青色，而不是浏览器默认的蓝 */
+.ocspeed-body ::selection {
+  background: rgba(0, 213, 255, 0.26);
+  color: #f7f8f8;
+}
+
+/* 键盘可达性：统一焦点圈（深色底上默认 outline 几乎看不见） */
+.ocspeed-body a.fbtn:focus-visible,
+.ocspeed-body summary:focus-visible,
+.ocspeed-body .chart-legend .lg:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--brand-ring);
+  border-radius: 6px;
+}
+
+/* 尊重系统的"减弱动态效果"设置（前庭敏感用户） */
+@media (prefers-reduced-motion: reduce) {
+  .ocspeed-body *,
+  .ocspeed-body *::before,
+  .ocspeed-body *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* 窄屏：卡片与面板内边距收一档，避免手机上文字贴边 */
+@media (max-width: 760px) {
+  .ocspeed-body { padding: 12px 12px 20px; }
+  .ocspeed-body .panel,
+  .ocspeed-body details.cfg { padding: 16px 14px; }
+  .ocspeed-body .card { padding: 14px; }
+  .ocspeed-body h1 { font-size: 16px; }
+}
+/* ================= 分类测速（视频/流媒体/AI） =================
+   数据是 5 行 × 6 列的小方阵，所以快慢用「底色热力」表达（条件格式那一套），
+   而不是每个格子塞一根延迟条 —— 30 个小格子里塞 30 根条会糊成一片，
+   数字反而看不清。数字保留在格子里保证拿得准，底色只负责让人先扫到
+   「哪一片更绿」，再低头读具体值。
+   ============================================================= */
+
+/* ---- 结论条：每个分类的最佳节点（先给答案，表在下面给证据） ---- */
+.ocspeed-body .catbest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.ocspeed-body .catbest .cb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-left: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.ocspeed-body .catbest .cb i {
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.ocspeed-body .catbest .cb b {
+  color: var(--text-main);
+  font-weight: 500;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ocspeed-body .catbest .cb em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--brand-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分类色只落在 2px 左边线上 —— 整块铺色会把几个 chip 变成彩色积木 */
+.ocspeed-body .catbest .cb.c-video { border-left-color: #f472b6; }
+.ocspeed-body .catbest .cb.c-media { border-left-color: #a78bfa; }
+.ocspeed-body .catbest .cb.c-ai    { border-left-color: var(--brand-primary); }
+.ocspeed-body .catbest .cb.c-other { border-left-color: var(--text-sub); }
+
+/* ---- 分组表头 ---- */
+/* th 默认 uppercase，会把品牌名毁掉（YouTube → YOUTUBE），这里关掉 */
+.ocspeed-body table.sites th { text-transform: none; }
+
+.ocspeed-body table.sites thead tr.catrow th.cbth {
+  text-align: center;
+  padding: 5px 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.ocspeed-body table.sites thead tr.catrow th.cbth em {
+  font-style: normal;
+  margin-left: 5px;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: var(--text-sub);
+}
+
+.ocspeed-body table.sites thead tr.catrow th.cbth.c-video { border-bottom-color: #f472b6; }
+.ocspeed-body table.sites thead tr.catrow th.cbth.c-media { border-bottom-color: #a78bfa; }
+.ocspeed-body table.sites thead tr.catrow th.cbth.c-ai    { border-bottom-color: var(--brand-primary); }
+.ocspeed-body table.sites thead tr.catrow th.cbth.c-other { border-bottom-color: var(--text-sub); }
+
+.ocspeed-body table.sites thead tr.domrow th {
+  padding: 6px 12px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-body);
+  background: var(--bg-card);
+  font-weight: 500;
+}
+
+/* ---- 延迟热力：4 档，别做成彩虹表 ---- */
+.ocspeed-body table.sites tbody td.d {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-right: 14px;
+}
+
+.ocspeed-body table.sites tbody td.h4 { background: rgba(16, 185, 129, 0.16); }
+.ocspeed-body table.sites tbody td.h3 { background: rgba(16, 185, 129, 0.07); }
+.ocspeed-body table.sites tbody td.h2 { background: rgba(245, 158, 11, 0.11); }
+.ocspeed-body table.sites tbody td.h1 { background: rgba(248, 113, 113, 0.13); }
+.ocspeed-body table.sites tbody td.h0 { background: transparent; }
+
+/* 每列最快：右上角一个小点，不抢数字的注意力 */
+.ocspeed-body table.sites tbody td.d.best {
+  position: relative;
+  font-weight: 600;
+}
+
+.ocspeed-body table.sites tbody td.d.best:after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+/* ---- 综合列（各站中位数） ---- */
+.ocspeed-body table.sites th.agg,
+.ocspeed-body table.sites td.agg {
+  border-left: 1px solid var(--border-light);
+  color: var(--text-main);
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.ocspeed-body table.sites td.agg .u {
+  font-size: 9.5px;
+  color: var(--text-sub);
+  margin-left: 2px;
+  font-weight: 400;
+}
+
+/* ---- 行排名徽标 ----
+   名次写在 data-rk 上、由 CSS 渲染，而不是塞进文本：
+   否则「按节点名排序」会把前面的数字也算进去（1|L1…排在 10|L1… 之后）。 */
+.ocspeed-body table.sites tbody tr.node-row td.c-node:before {
+  content: attr(data-rk);
+  display: inline-block;
+  min-width: 15px;
+  margin-right: 7px;
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-sub);
+  background: var(--bg-muted);
+  border-radius: 3px;
+  vertical-align: 1px;
+}
+
+/* 综合最好的那一行（徽标 = 1）换绿色。按 data-rk 而不是 :first-child ——
+   行序是初赛延迟顺序，综合第一未必在第一行，用 :first-child 会标错人。 */
+.ocspeed-body table.sites tbody tr.node-row td.c-node[data-rk="1"]:before {
+  color: var(--status-ok);
+  background: var(--status-ok-bg);
+}
+
+/* ---- 表下注释：采样规模 / 数据时刻 / 颜色图例 ---- */
+.ocspeed-body .tmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+.ocspeed-body .tmeta .sep { opacity: 0.5; }
+
+.ocspeed-body .tmeta .lgd2 { display: inline-flex; align-items: center; }
+
+.ocspeed-body .tmeta .lgd2 .q {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin: 0 5px 0 10px;
+}
+
+.ocspeed-body .tmeta .lgd2 .q:first-child { margin-left: 0; }
+.ocspeed-body .tmeta .lgd2 .q.g { background: var(--status-ok); }
+.ocspeed-body .tmeta .lgd2 .q.y { background: var(--status-warn); }
+.ocspeed-body .tmeta .lgd2 .q.r { background: var(--status-bad); }
+.ocspeed-body .tmeta .lgd2 .q.x { background: var(--text-sub); }
+
+/* 行 hover：用左侧 3px 标记，而不是给整行铺底色 ——
+   铺底色会盖掉热力底纹，hover 时反而看不出哪个格子快 */
+.ocspeed-body table.sites tbody tr.node-row:hover td.c-node {
+  box-shadow: inset 3px 0 0 var(--brand-primary);
+}
+
+/* 窄屏：结论条里的节点名收窄，分组带字距收一档 */
+@media (max-width: 760px) {
+  .ocspeed-body .catbest .cb b { max-width: 110px; }
+  .ocspeed-body table.sites thead tr.catrow th.cbth { letter-spacing: 0.06em; font-size: 10px; }
 }
 
 </style>
@@ -1504,9 +1948,9 @@
     <b>延迟趋势</b>
     <span class="muted">最近 10 轮测速</span>
     <span class="chart-legend" id="trendLegend">
-      <span class="lg" data-key="best" title="本轮最慢节点延迟（越低越好）"><i style="background:#059669"></i>最优延迟</span>
+      <span class="lg" data-key="best" title="本轮最慢节点延迟（越低越好）"><i style="background:#10b981"></i>最优延迟</span>
       <span class="lg" data-key="final" title="整轮决赛总耗时，量纲与节点延迟不同，默认隐藏"><i style="background:#f59e0b"></i>决赛耗时</span>
-      <span class="lg" data-key="ok" title="通过初赛的节点数量（右轴）"><i style="background:#0284c7"></i>可用节点</span>
+      <span class="lg" data-key="ok" title="通过初赛的节点数量（右轴）"><i style="background:#00d5ff"></i>可用节点</span>
     </span>
   </div>
   <div class="chart-body" id="chartBody">
@@ -1645,7 +2089,9 @@ function decorateAll(root){
   root = root || document;
   var ns = root.querySelectorAll('.c-node');
   for(var i=0;i<ns.length;i++) decorateNode(ns[i]);
-  var ds = root.querySelectorAll('td.d[data-v]');
+  // 只装饰真正表示延迟的单元格：data-plain 的是计数（可用/失效/假节点个数），
+  // data-heat 的是分类测速矩阵（用底色表达快慢，再叠延迟条会糊成一片）
+  var ds = root.querySelectorAll('td.d[data-v]:not([data-plain]):not([data-heat])');
   for(var j=0;j<ds.length;j++) decorateDelay(ds[j]);
 }
 
@@ -1665,16 +2111,21 @@ function bindSortable(tbl){
   if(!tbl) return;
   var ths = tbl.querySelectorAll('thead th[data-sort]');
   for(var i=0;i<ths.length;i++){
-    (function(tbl, th, idx){
+    (function(tbl, th, seq){
+      // 列号优先取 data-col：分类表表头有 colspan/rowspan（分类带 + 首尾两个跨行单元格），
+      // 「第几个可排序表头」和「第几个 td」不再一一对应，按 seq 排会串列
+      //（最典型：点「综合」实际按第一个站点的值排）。
+      var col = th.getAttribute('data-col');
+      col = (col === null) ? seq : parseInt(col, 10);
       th.addEventListener('click', function(){
         var type = th.getAttribute('data-sort') || 'str';
-        var key = (tbl.id||'t') + ':' + idx;
+        var key = (tbl.id||'t') + ':' + col;
         var dir = (sortState[key] === 'asc') ? 'desc' : 'asc';
         sortState[key] = dir;
         var tb = tbl.tBodies[0]; if(!tb) return;
         var rows = Array.prototype.slice.call(tb.rows);
         rows.sort(function(a,b){
-          var va = cellSortVal(a.cells[idx], type), vb = cellSortVal(b.cells[idx], type);
+          var va = cellSortVal(a.cells[col], type), vb = cellSortVal(b.cells[col], type);
           if(type==='num') return dir==='asc' ? va-vb : vb-va;
           return dir==='asc' ? String(va).localeCompare(String(vb),'zh') : String(vb).localeCompare(String(va),'zh');
         });
@@ -1682,9 +2133,17 @@ function bindSortable(tbl){
         var all = tbl.querySelectorAll('thead th');
         for(var j=0;j<all.length;j++) all[j].removeAttribute('data-dir');
         th.setAttribute('data-dir', dir);
+        // 重排后名次徽标就与行序不符了，去掉比看着错更好
+        numBadges(tb);
       });
     })(tbl, ths[i], i);
   }
+}
+/* 排序后行序变了，data-rk 的序号会自相矛盾（第 1 行挂着 3 号徽标）→ 整列撤掉 */
+function numBadges(tb){
+  if(!tb) return;
+  var tds = tb.querySelectorAll('td.c-node[data-rk]');
+  for(var i=0;i<tds.length;i++) tds[i].removeAttribute('data-rk');
 }
 
 /* ---------- 搜索 ---------- */
@@ -1733,9 +2192,12 @@ function renderHistory(arr){
     var sw = r.sw ? '<span style="color:var(--status-ok);font-weight:600">已切换</span>' : '<span class="muted">保持</span>';
     h += '<tr><td class="d">'+esc(r.t)+'</td><td>'+sw+'</td><td class="c-node">'+esc(r.best)+'</td>'
        + '<td class="d" data-v="'+r.d+'">'+r.d+' ms</td>'
-       + '<td class="d" data-v="'+r.ok+'">'+r.ok+'</td>'
-       + '<td class="d" data-v="'+r.dead+'">'+r.dead+'</td>'
-       + '<td class="d" data-v="'+r.fake+'">'+r.fake+'</td></tr>';
+       /* 这三列是"节点个数"，不是延迟。加 data-plain 让 decorateDelay 跳过它们 ——
+          否则会被画成延迟条（宽度按 v/2000 算，个位数只能剩一条 6% 的碎条，
+          既无意义又比数字更抢眼）。data-v 保留给排序用。 */
+       + '<td class="d" data-v="'+r.ok+'" data-plain="1">'+r.ok+'</td>'
+       + '<td class="d" data-v="'+r.dead+'" data-plain="1">'+r.dead+'</td>'
+       + '<td class="d" data-v="'+r.fake+'" data-plain="1">'+r.fake+'</td></tr>';
   }
   h += '</tbody></table>';
   if(!n){ box.innerHTML = '<div class="empty"><div>历史记录格式无法解析</div></div>'; return; }
@@ -1964,10 +2426,11 @@ function renderBackup(bk){
   var h='';
   for(var i=0;i<bk.list.length;i++){
     var x=bk.list[i], dv=x.d;
-    var col = (dv!=null && dv<500) ? 'var(--status-ok)' : ((dv!=null && dv<1000) ? 'var(--status-warn)' : 'var(--status-bad)');
+    // 与 Lua 侧保持一致：只给类名，颜色交给 CSS（两份渲染路径不会再有配色漂移）
+    var lv = (dv==null) ? 'x' : (dv<500 ? 'g' : (dv<1000 ? 'y' : 'r'));
     h += '<span class="bk-item r'+(i+1)+'"><i>'+(i+1)+'</i>'
        + '<span class="nm">'+esc(x.n)+'</span>'
-       + '<b style="color:'+col+'">'+(dv!=null ? (dv+' ms') : '-')+'</b></span>';
+       + '<b class="'+lv+'">'+(dv!=null ? (dv+' ms') : '-')+'</b></span>';
   }
   list.innerHTML=h;
   if(sub){
@@ -2263,9 +2726,9 @@ function parseHistoryForChart(arr){
 
 /* ========== 趋势图 v2：平滑曲线 + 双轴共用延迟刻度 + hover tooltip ========== */
 var TREND_SERIES = [
-  {key: 'best',  label: '最优延迟', color: '#059669', unit: 'ms', axis: 'left',  dash: null,  w: 2.5, area: true},
+  {key: 'best',  label: '最优延迟', color: '#10b981', unit: 'ms', axis: 'left',  dash: null,  w: 2.5, area: true},
   {key: 'final', label: '决赛耗时', color: '#f59e0b', unit: 'ms', axis: 'left',  dash: [5, 4], w: 2, area: false},
-  {key: 'ok',    label: '可用节点', color: '#0284c7', unit: '',   axis: 'right', dash: null,  w: 2, area: true}
+  {key: 'ok',    label: '可用节点', color: '#00d5ff', unit: '',   axis: 'right', dash: null,  w: 2, area: true}
 ];
 /* final 为整轮耗时（量纲与延迟不同），默认折叠，点图例可展开 */
 var TREND = {data: [], hidden: {final: true}, geom: null, hover: -1, bound: false, animated: false, raf: null};

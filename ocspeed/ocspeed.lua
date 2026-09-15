@@ -25,6 +25,32 @@ function index()
 end
 
 local SCRIPT = "/usr/libexec/openclash-helper/speedswitch.sh"
+-- 分类测速结果（speedswitch.sh 的 build_sites_json 写）
+local SITES_JSON = "/etc/openclash-helper/sites.json"
+
+-- 延迟分级 → CSS 类名。原先各处写死 #12864b/#b45309/#c62828（浅色底配色），
+-- 在深色主题下对比度不够，且换肤色要改四处 Lua。统一收敛到 g/y/r/x 四个类，
+-- 具体颜色由 ocspeed.htm / nodetest.htm 的令牌决定。
+--   阈值与页面图例一致：<500 绿 · <1000 黄 · ≥1000 红 · 超时 x
+function latency_class(d)
+	d = tonumber(d)
+	if not d then return "x" end
+	if d < 500 then return "g" end
+	if d < 1000 then return "y" end
+	return "r"
+end
+
+-- 热力档位 → 底色深浅（h4 最快 … h1 最慢，h0 超时无底色）。
+-- 与 latency_class 同向但分档更细：颜色管「这一格可读」，底色管「哪一片更快」。
+-- 分类表是 5 行 × 6 列的数字方阵，逐个读数很慢，深浅扫一眼就能定位。
+function heat_level(d)
+	d = tonumber(d)
+	if not d then return 0 end
+	if d <= 300 then return 4 end
+	if d <= 500 then return 3 end
+	if d <= 1000 then return 2 end
+	return 1
+end
 
 -- 全部可配置项及其默认值（默认值取自设备出厂配置，避免保存时误清空）
 local DEFAULTS = {
@@ -90,7 +116,9 @@ local function build_parts(filt)
 			for _, x in ipairs(d.nodes) do
 				if filt == "all" or (filt == "ok" and x.s == "ok") or (filt == "dead" and x.s == "dead") or (filt == "fake" and x.s == "fake") then
 					local stxt = x.s == "ok" and "可用" or (x.s == "dead" and "失效" or "假节点")
-					local color = x.s == "ok" and "#12864b" or (x.s == "dead" and "#c62828" or "#78859a")
+					-- 状态色改由 CSS 类决定：原来写死的 #12864b/#c62828 是给浅色底配的，
+					-- 在深色底上对比度不足，而且换主题得改 Lua。
+					local scls = x.s == "ok" and "st-ok" or (x.s == "dead" and "st-dead" or "st-fake")
 					local delay = x.d and (x.d .. " ms") or "超时"
 				local dnum = x.d and tostring(x.d) or "999999"
 				-- 假节点是按排除关键词判定的订阅方公告/流量信息，不是真实节点，视觉上弱化
@@ -99,7 +127,7 @@ local function build_parts(filt)
 						.. '<td class="c-node">' .. esc_html(x.n) .. '</td>'
 						.. '<td>' .. esc_html(x.t) .. '</td>'
 						.. '<td class="d" data-v="' .. dnum .. '">' .. delay .. '</td>'
-						.. '<td style="color:' .. color .. '">' .. stxt .. '</td></tr>'
+						.. '<td class="' .. scls .. '">' .. stxt .. '</td></tr>'
 				end
 			end
 		end
@@ -119,29 +147,190 @@ local function build_parts(filt)
 	end
 
 	-- 2. 分类测速表 (sites.json)
+	-- 这一版按「一眼看出哪个节点适合哪个分类」排：
+	--   · 列按分类聚拢，分类带横跨其上 —— 原来 6 列域名平铺，得逐个认域名才知道
+	--     哪几列是 AI 站，问「选哪个节点上 AI」时根本没法扫；
+	--   · 底色做延迟热力（越快越绿、越慢越红），数字本身仍按阈值上色 ——
+	--     30 个格子里找「哪一片更绿」比逐个读数快得多；
+	--   · 每列最快的格子加 best 标记，每行加「综合」（各站延迟中位数，抗单点抖动）；
+	--   · 顶部直接给结论：每个分类的最佳节点 + 该分类中位数；
+	--   · 超时不写「超时」二字，只留一个 –。十几个「超时」叠在一起会把整张表压成
+	--     一片红字，真正可用的格子反而看不见了（这个毛病上一版就有）。
 	local sites_table = '<p class="muted">暂无分类测速数据，点击测速生成</p>'
-	local sj = jsonc.parse(fs.readfile("/etc/openclash-helper/sites.json") or "null")
-	if sj and sj.sites then
-		local h = '<table><thead><tr><th data-sort="str">节点</th>'
-		for _, s in ipairs(sj.sites) do h = h .. '<th data-sort="num">' .. esc_html(s) .. '</th>' end
-		h = h .. '</tr></thead><tbody>'
-		local b = ""
-		if sj.data then
-			for _, row in ipairs(sj.data) do
-				b = b .. '<tr class="node-row" data-name="' .. esc_html(row.n) .. '" title="点击测速并切换"><td class="c-node">' .. esc_html(row.n) .. '</td>'
-				for k, s in ipairs(sj.sites) do
-					local d = row.d and row.d[k]
-					if d then
-						local col = d < 500 and "#12864b" or (d < 1000 and "#b45309" or "#c62828")
-						b = b .. '<td class="d" data-v="' .. tostring(d) .. '" style="color:' .. col .. '">' .. d .. ' ms</td>'
-					else
-						b = b .. '<td class="d" data-v="999999" style="color:#c62828">超时</td>'
-					end
-				end
-				b = b .. '</tr>'
+	local sj = jsonc.parse(fs.readfile(SITES_JSON) or "null")
+	if sj and sj.sites and #sj.sites > 0 then
+		local sites = sj.sites
+		local cats = sj.cats or {}
+		-- 老版 sites.json 没有 cats 字段（或用户填了未收录的域名）→ 一律归「其他」
+		for i = 1, #sites do
+			if not cats[i] or cats[i] == "" then cats[i] = "其他" end
+		end
+
+		local CAT_ORDER = { "视频", "流媒体", "AI", "其他" }
+		local CAT_CLS = { ["视频"] = "c-video", ["流媒体"] = "c-media", ["AI"] = "c-ai", ["其他"] = "c-other" }
+		local function catcls(c) return CAT_CLS[c] or "c-other" end
+
+		-- 中位数。入参必须是紧实数组（无 nil 空洞）。
+		-- 踩过的坑：原先写成「for _, x in ipairs(t) 收集非空值」，而站点超时会在
+		-- 向量里留下 nil 空洞 —— ipairs 遇到第一个 nil 就停，`#t` 对带空洞的表
+		-- 也是未定义行为。合成数据里 A 节点 5 个值的中位数被算成了第 1 个值
+		-- （440 变成 120）。所以先用 densify() 抽出紧实数组再算。
+		local function med(a)
+			local n = #a
+			if n == 0 then return nil end
+			table.sort(a)
+			local h = math.floor((n + 1) / 2)
+			if n % 2 == 1 then return a[h] end
+			return math.floor((a[h] + a[h + 1]) / 2)
+		end
+
+		-- 「按站点下标索引、可能含 nil」的向量 → 紧实数组
+		local function densify(v, n)
+			local a = {}
+			for i = 1, n do
+				if v[i] then a[#a + 1] = v[i] end
+			end
+			return a
+		end
+
+		-- 抽数值 + 每列最快
+		local rows, colmin = {}, {}
+		for _, row in ipairs(sj.data or {}) do
+			local v = {}
+			for k = 1, #sites do
+				local d = tonumber(row.d and row.d[k])
+				v[k] = d
+				if d and (not colmin[k] or d < colmin[k]) then colmin[k] = d end
+			end
+			rows[#rows + 1] = { n = row.n, v = v }
+		end
+		for _, r in ipairs(rows) do r.m = med(densify(r.v, #sites)) end
+
+		-- 行按「综合」升序排名。行本身保持初赛延迟顺序不动 —— 两者不一致时
+		-- （初赛最快但分类综合排第 3）正好把「通用快 ≠ 分类快」暴露出来。
+		local seq = {}
+		for i = 1, #rows do seq[i] = i end
+		table.sort(seq, function(a, b)
+			local ma, mb = rows[a].m, rows[b].m
+			if ma and mb then
+				if ma ~= mb then return ma < mb end
+			elseif ma then
+				return true
+			elseif mb then
+				return false
+			end
+			return rows[a].n < rows[b].n
+		end)
+		local rank = {}
+		for pos, i in ipairs(seq) do rank[i] = pos end
+
+		-- 列顺序：按分类聚拢（分组表头要求同分类列连续），分类内保持原顺序
+		local cols, ins = {}, {}
+		for _, c in ipairs(CAT_ORDER) do
+			for k = 1, #sites do
+				if cats[k] == c then cols[#cols + 1] = k; ins[k] = true end
 			end
 		end
-		sites_table = h .. b .. '</tbody></table>'
+		for k = 1, #sites do
+			if not ins[k] then cols[#cols + 1] = k end
+		end
+
+		-- 每个分类的最佳节点
+		local catbest = {}
+		for _, c in ipairs(CAT_ORDER) do
+			local ks = {}
+			for k = 1, #sites do
+				if cats[k] == c then ks[#ks + 1] = k end
+			end
+			if #ks > 0 then
+				local bi, bm = nil, nil
+				for i, r in ipairs(rows) do
+					local a = {}
+					for _, k in ipairs(ks) do
+						if r.v[k] then a[#a + 1] = r.v[k] end
+					end
+					local m = med(a)
+					if m and (not bm or m < bm) then bi, bm = i, m end
+				end
+				if bi then catbest[c] = { n = rows[bi].n, m = bm } end
+			end
+		end
+
+		local h = ''
+		-- 结论条：先给答案，再给证据（表在下面）
+		if next(catbest) then
+			h = h .. '<div class="catbest">'
+			for _, c in ipairs(CAT_ORDER) do
+				local e = catbest[c]
+				if e then
+					h = h .. '<span class="cb ' .. catcls(c) .. '"><i>' .. esc_html(c) .. '</i>'
+						.. '<b title="' .. esc_html(e.n) .. '">' .. esc_html(e.n) .. '</b>'
+						.. '<em>' .. e.m .. 'ms</em></span>'
+				end
+			end
+			h = h .. '</div>'
+		end
+
+		h = h .. '<table class="sites"><thead>'
+		-- 表头第一行：分类带。首尾两个固定列用 rowspan=2 占满两行
+		h = h .. '<tr class="catrow"><th class="cn" rowspan="2" data-sort="str" data-col="0">节点</th>'
+		local p = 1
+		while p <= #cols do
+			local c = cats[cols[p]]
+			local q = p
+			while q <= #cols and cats[cols[q]] == c do q = q + 1 end
+			h = h .. '<th class="cbth ' .. catcls(c) .. '" colspan="' .. (q - p) .. '">'
+				.. esc_html(c) .. '<em>' .. (q - p) .. '</em></th>'
+			p = q
+		end
+		-- data-col 是必需的：rowspan/colspan 会让「第几个 data-sort 表头」和
+		-- 「第几个 td」错位，排序会串列（综合列排的是第一个站点的值）
+		h = h .. '<th class="agg" rowspan="2" data-sort="num" data-col="' .. (#cols + 1)
+			.. '" title="各站延迟中位数（超时不计）">综合</th></tr>'
+		-- 表头第二行：站点名
+		h = h .. '<tr class="domrow">'
+		for n, k in ipairs(cols) do
+			local ttl = (sj.urls and sj.urls[k]) or sites[k] or ""
+			h = h .. '<th data-sort="num" data-col="' .. n .. '" title="' .. esc_html(ttl) .. '">'
+				.. esc_html(sites[k] or "") .. '</th>'
+		end
+		h = h .. '</tr></thead><tbody>'
+
+		local b = ''
+		for i, r in ipairs(rows) do
+			-- data-rk 必须挂在 td 上（不是 tr）：::before 的 attr() 只读元素自身的属性；
+			-- 而排名用 CSS 渲染而不是塞进文本，是为了不污染按节点名排序时的 textContent。
+			-- data-heat 让 decorateAll 跳过这些格子：分类表用底色表达快慢，
+			-- 再叠 30 根延迟条只会糊成一片。
+			b = b .. '<tr class="node-row" data-name="' .. esc_html(r.n) .. '" title="点击测速并切换">'
+				.. '<td class="c-node" data-rk="' .. (rank[i] and tostring(rank[i]) or "") .. '">'
+				.. esc_html(r.n) .. '</td>'
+			for n, k in ipairs(cols) do
+				local d = r.v[k]
+				if d then
+					local bst = (colmin[k] and d <= colmin[k]) and ' best' or ''
+					b = b .. '<td class="d ' .. latency_class(d) .. ' h' .. heat_level(d) .. bst
+						.. '" data-v="' .. d .. '" data-heat="1">' .. d .. '</td>'
+				else
+					-- 视觉上只留一个 –（title 里保留「超时」说法）
+					b = b .. '<td class="d x h0" data-v="999999" data-heat="1" title="超时">&ndash;</td>'
+				end
+			end
+			local m = r.m
+			b = b .. '<td class="d agg" data-v="' .. (m and tostring(m) or "999999")
+				.. '" data-heat="1">'
+				.. (m and (m .. '<span class="u">ms</span>') or '&ndash;') .. '</td></tr>'
+		end
+		h = h .. b .. '</tbody></table>'
+
+		-- 表下注释：采样规模 + 数据时刻 + 颜色图例
+		local age = sj.ts and os.date("%m-%d %H:%M", tonumber(sj.ts)) or "-"
+		h = h .. '<div class="tmeta"><span>采样 ' .. tostring(#rows) .. ' 节点 × ' .. tostring(#sites) .. ' 站点</span>'
+			.. '<span class="sep">·</span><span>分类于 ' .. esc_html(age) .. '</span>'
+			.. '<span class="sep">·</span><span class="lgd2">'
+			.. '<i class="q g"></i>≤500<i class="q y"></i>≤1000<i class="q r"></i>&gt;1000<i class="q x"></i>超时'
+			.. '</span></div>'
+		sites_table = h
 	end
 
 	-- 3. 状态卡片 (status.json + live API)
@@ -174,13 +363,13 @@ local function build_parts(filt)
 		top_table = ""
 		for i, t in ipairs(st.top) do
 			local d = t.d or 0
-			local col = d < 500 and "#12864b" or (d < 1000 and "#b45309" or "#c62828")
+			local lv = latency_class(d)
 			-- 决赛延迟塞进 tooltip: 加列会动表头, 不改结构更稳
 			local tip = (t.f and ("决赛 " .. tostring(t.f) .. " ms") or "决赛未通过(不影响排名)")
 				.. " · 点击测速并切换"
 			top_table = top_table .. '<tr class="node-row" data-name="' .. esc_html(t.n) .. '" title="' .. esc_html(tip) .. '">'
 				.. '<td>' .. i .. '</td><td class="c-node">' .. esc_html(t.n) .. '</td>'
-				.. '<td class="d" data-v="' .. tostring(d) .. '" style="color:' .. col .. '">' .. d .. ' ms</td></tr>'
+				.. '<td class="d ' .. lv .. '" data-v="' .. tostring(d) .. '">' .. d .. ' ms</td></tr>'
 		end
 	end
 
@@ -192,10 +381,10 @@ local function build_parts(filt)
 	if bj and bj.list and #bj.list > 0 then
 		for i, x in ipairs(bj.list) do
 			local dv = x.d
-			local col = (dv and dv < 500) and "#12864b" or ((dv and dv < 1000) and "#b45309" or "#c62828")
+			local lv = latency_class(dv)
 			backup_html = backup_html .. '<span class="bk-item r' .. i .. '"><i>' .. i .. '</i>'
 				.. '<span class="nm">' .. esc_html(x.n) .. '</span>'
-				.. '<b style="color:' .. col .. '">' .. (dv and (tostring(dv) .. " ms") or "-") .. '</b></span>'
+				.. '<b class="' .. lv .. '">' .. (dv and (tostring(dv) .. " ms") or "-") .. '</b></span>'
 		end
 		backup_ts_raw = tostring(bj.ts or 0)
 		backup_sub = "上次预选 " .. os.date("%H:%M:%S", tonumber(bj.ts or os.time()))

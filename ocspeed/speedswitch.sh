@@ -261,11 +261,67 @@ build_nodes_json() {
   printf ']}' >> $DATA/nodes.json
 }
 
+# 站点 → 「分类 + 显示名」。分类只影响展示（视频/流媒体/AI 分组带），不参与任何判定。
+# 匹配的是域名子串，所以词要收窄：*max.com* 会把一堆无关域名吃进「流媒体」，
+# *amazon* 同理（amazonaws 也是 amazon）。宁可落到「其他」，也别错归。
+site_meta() { # url -> "分类<TAB>显示名"
+  local d
+  d=$(printf '%s' "$1" | sed 's|^https://||; s|^http://||; s|/.*||; s|^www\.||')
+  local cat="其他" disp="$d"
+  case "$d" in
+    *youtube*|*youtu.be*)    cat="视频";   disp="YouTube" ;;
+    *bilibili*)              cat="视频";   disp="Bilibili" ;;
+    *iqiyi*)                 cat="视频";   disp="爱奇艺" ;;
+    *youku*)                 cat="视频";   disp="优酷" ;;
+    *v.qq.com*)              cat="视频";   disp="腾讯视频" ;;
+    *netflix*)               cat="流媒体"; disp="Netflix" ;;
+    *disney*)                cat="流媒体"; disp="Disney+" ;;
+    *hbomax*)                cat="流媒体"; disp="HBO Max" ;;
+    *primevideo*)            cat="流媒体"; disp="Prime Video" ;;
+    *hulu*)                  cat="流媒体"; disp="Hulu" ;;
+    *spotify*)               cat="流媒体"; disp="Spotify" ;;
+    *gemini*|*bard*)         cat="AI";     disp="Gemini" ;;
+    *openai*|*chatgpt*)      cat="AI";     disp="ChatGPT" ;;
+    *claude*|*anthropic*)    cat="AI";     disp="Claude" ;;
+    *copilot*)               cat="AI";     disp="Copilot" ;;
+    *perplexity*)            cat="AI";     disp="Perplexity" ;;
+    *grok*)                  cat="AI";     disp="Grok" ;;
+  esac
+  printf '%s\t%s\n' "$cat" "$disp"
+}
+
+# 文件 → JSON 字符串数组。站点名可能带引号/反斜杠（用户手填的 URL），先剔掉再入 JSON，
+# 否则一个带 " 的 URL 就能让整个 sites.json 解析失败、页面退化成「暂无数据」。
+json_strarray() { # file
+  local first=1 l
+  printf '['
+  while IFS= read -r l; do
+    [ -z "$l" ] && continue
+    l=$(printf '%s' "$l" | tr -d '"\\')
+    [ -z "$l" ] && continue
+    [ $first -eq 0 ] && printf ','
+    first=0
+    printf '"%s"' "$l"
+  done < "$1"
+  printf ']'
+}
+
 build_sites_json() {
   local sites=$(get sites)
   [ -z "$sites" ] && sites='https://www.youtube.com|https://www.netflix.com|https://www.disneyplus.com|https://gemini.google.com|https://chatgpt.com|https://claude.ai'
   printf '%s' "$sites" | tr '|' '\n' | grep . > $DIR/sites.list
   head -5 $DIR/stage1.txt | cut -f2 > $DIR/top5nodes.txt
+
+  # 域名→分类的映射只在这里维护一份，写进 sites.json 让页面直接照着渲染。
+  # 两侧各存一份必然漂移（改了一边忘了另一边，分组带就和实际站点对不上）。
+  : > $DIR/site_cats.txt
+  : > $DIR/site_disp.txt
+  while IFS= read -r s; do
+    [ -z "$s" ] && continue
+    site_meta "$s" | cut -f1 >> $DIR/site_cats.txt
+    site_meta "$s" | cut -f2 >> $DIR/site_disp.txt
+  done < $DIR/sites.list
+
   local idx=0
   while read -r s; do
     idx=$((idx+1))
@@ -275,30 +331,37 @@ build_sites_json() {
     done < $DIR/top5nodes.txt
     wait
   done < $DIR/sites.list
-  printf '{"ts":%s,"sites":[' "$(date +%s)" > $DATA/sites.json
-  local i=0
-  while read -r s; do
-    local label=$(echo "$s" | sed 's|https://||; s|/.*||; s|^www\.||')
-    [ $i -gt 0 ] && printf ',' >> $DATA/sites.json
-    printf '"%s"' "$label" >> $DATA/sites.json
-    i=$((i+1))
-  done < $DIR/sites.list
-  printf '],"data":[' >> $DATA/sites.json
-  local j=0
-  while read -r name; do
-    [ $j -gt 0 ] && printf ',' >> $DATA/sites.json
-    printf '{"n":"%s","d":[' "$name" >> $DATA/sites.json
-    local k=0
-    while read -r s; do
-      k=$((k+1))
-      [ $k -gt 1 ] && printf ',' >> $DATA/sites.json
-      d=$(awk -F '\t' -v n="$name" '$2==n{print $1; exit}' $DIR/site_$k.txt 2>/dev/null)
-      if [ -n "$d" ]; then printf '%s' "$d" >> $DATA/sites.json; else printf 'null' >> $DATA/sites.json; fi
-    done < $DIR/sites.list
-    printf ']}' >> $DATA/sites.json
-    j=$((j+1))
-  done < $DIR/top5nodes.txt
-  printf ']}' >> $DATA/sites.json
+
+  local grp=$(get group); [ -z "$grp" ] && grp='宝贝云'
+  local d
+  # 先写临时文件再 mv: 页面直接读这个文件, 中途崩溃留下的半截 JSON
+  # 会让分类表整块退化成「暂无数据」, 而 mv 是原子的。
+  {
+    printf '{"ts":%s,"group":"%s","cats":' "$(date +%s)" "$grp"
+    json_strarray $DIR/site_cats.txt
+    printf ',"sites":'
+    json_strarray $DIR/site_disp.txt
+    printf ',"urls":'
+    json_strarray $DIR/sites.list
+    printf ',"data":['
+    local j=0
+    while read -r name; do
+      [ -z "$name" ] && continue
+      [ $j -gt 0 ] && printf ','
+      printf '{"n":"%s","d":[' "$name"
+      local k=0
+      while read -r s; do
+        k=$((k+1))
+        [ $k -gt 1 ] && printf ','
+        d=$(awk -F '\t' -v n="$name" '$2==n{print $1; exit}' $DIR/site_$k.txt 2>/dev/null)
+        if [ -n "$d" ]; then printf '%s' "$d"; else printf 'null'; fi
+      done < $DIR/sites.list
+      printf ']}'
+      j=$((j+1))
+    done < $DIR/top5nodes.txt
+    printf ']}'
+  } > $DATA/sites.json.tmp
+  mv $DATA/sites.json.tmp $DATA/sites.json
 }
 
 speedtest_full() {
