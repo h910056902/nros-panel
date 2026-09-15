@@ -342,26 +342,32 @@ stage_openclash() {
   fi
 
   # --- 起服务 ---
+  # 关键前置：OpenClash 没有配置文件时根本起不来（没东西可跑），
+  # 这时去等 7890 是白等 —— 实测每次白耗 1 分钟。所以先看有没有配置再决定等不等。
   /etc/init.d/openclash enable
+  OC_CONF=$(uci -q get openclash.config.config_path)
+  [ -n "$OC_CONF" ] || OC_CONF=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1)
+
   if [ "$CHANGED" = 1 ]; then
     /etc/init.d/openclash restart >/dev/null 2>&1 || /etc/init.d/openclash start
-    poll 60 port 7890 || ui_warn "7890 未监听（通常是订阅或内核还没就绪，去 LuCI 完成一次配置）"
     # 服务起来后主动拉一次订阅，确保配置文件落地
     [ -x /usr/share/openclash/openclash.sh ] && bash /usr/share/openclash/openclash.sh >/dev/null 2>&1 || :
+    OC_CONF=$(uci -q get openclash.config.config_path)
+    [ -n "$OC_CONF" ] || OC_CONF=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1)
   else
     /etc/init.d/openclash status 2>/dev/null | grep -q '^running' || /etc/init.d/openclash start
-    poll 30 port 7890 || ui_warn "7890 未监听"
   fi
 
   # --- 没指定用哪份配置时，自动指向第一份 yaml ---
-  if [ -z "$(uci -q get openclash.config.config_path)" ]; then
-    Y=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1)
-    if [ -n "$Y" ]; then
-      uci set openclash.config.config_path="$Y"
-      uci commit openclash
-      /etc/init.d/openclash restart >/dev/null 2>&1 || :
-      ui_ok "已指定配置 $(basename "$Y")"
-    fi
+  if [ -n "$OC_CONF" ] && [ -z "$(uci -q get openclash.config.config_path)" ]; then
+    uci set openclash.config.config_path="$OC_CONF"
+    uci commit openclash
+    /etc/init.d/openclash restart >/dev/null 2>&1 || :
+    ui_ok "已指定配置 $(basename "$OC_CONF")"
+  fi
+
+  if [ -n "$OC_CONF" ] && [ -x "$OC_CORE" ]; then
+    poll 30 port 7890 || ui_warn "7890 未监听（去 LuCI → OpenClash 确认一次）"
   fi
 
   # --- ocspeed 自动测速：脚本是固件自带的，这里只补 3 条 cron ---
@@ -377,8 +383,16 @@ EOF
   /etc/init.d/cron enable 2>/dev/null || :
   /etc/init.d/cron restart 2>/dev/null || :
 
-  OC_STAT=$(/etc/init.d/openclash status 2>/dev/null | head -n1)
-  if port 7890; then ui_ok "服务 $OC_STAT · 代理端口 7890 已监听"; else ui_ok "服务 $OC_STAT"; fi
+  # --- 收尾汇报：状态要说实话，"未跑起来"不能报成 ✓ ---
+  OC_STAT=$(/etc/init.d/openclash status 2>/dev/null | head -n1 | tr -d '\r')
+  if port 7890; then
+    ui_ok "服务 running · 代理端口 7890 已监听"
+  elif [ -n "$OC_CONF" ] && [ -x "$OC_CORE" ]; then
+    ui_warn "服务 $OC_STAT（配置与内核都在，但没起来 —— 看 logread | grep -i clash）"
+  else
+    ui_warn "服务 $OC_STAT —— 缺配置文件，去 LuCI → OpenClash 填订阅后即可启动"
+    OC_STAT="$OC_STAT（待订阅）"
+  fi
   ui_stage_end
 }
 
