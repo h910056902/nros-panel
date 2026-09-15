@@ -293,6 +293,81 @@ LUAEOF
   ui_ok "已打通商店'打开'按钮（本地应用路由注入）"
 }
 
+# 给「不走 opkg 安装」的应用造占位包。
+# 商店守护进程是按 `opkg info` 判「已安装 / 未安装」的，1Panel 由官方脚本安装、
+# 在 opkg 数据库里查无此包，直接注册会永远显示「未安装」，点安装还会去拉不存在的
+# 包而报错。所以先造一个空内容占位包让 opkg 认账。
+# 包体是空的（只有一个 README）；商店里的「卸载」只会删掉这个占位包，
+# 真正的卸载走 `1pctl uninstall`（凭据文件里有写）。
+install_app_stub() {
+  local name="$1" ver="$2" des="$3"
+  opkg status "$name" 2>/dev/null | grep -q 'Status:' && return 0
+  local arch D=/tmp/kpstub-$name
+  arch=$(sed -n 's/^DISTRIB_ARCH=//p' /etc/openwrt_release 2>/dev/null | tr -d "'\"")
+  [ -n "$arch" ] || arch=aarch64_cortex-a53
+  rm -rf "$D"
+  mkdir -p "$D/control" "$D/data/usr/share/$name"
+  {
+    echo "Package: $name"
+    echo "Version: $ver"
+    echo "Depends: libc"
+    echo "Section: utils"
+    echo "Architecture: $arch"
+    echo "Installed-Size: 1"
+    echo "Description: $des"
+  } > "$D/control/control"
+  : > "$D/control/conffiles"
+  echo "$des" > "$D/data/usr/share/$name/README"
+  ( cd "$D/control" && tar -czf "$D/control.tar.gz" ./control ./conffiles )
+  ( cd "$D/data"    && tar -czf "$D/data.tar.gz" . )
+  ( cd "$D" && echo 2.0 > debian-binary \
+    && tar -czf "/tmp/$name.ipk" ./debian-binary ./control.tar.gz ./data.tar.gz )
+  if opkg install "/tmp/$name.ipk" >/dev/null 2>&1; then
+    rm -rf "$D"
+  else
+    ui_warn "$name 占位包安装失败（商店状态可能显示「未安装」，不影响使用）"
+  fi
+}
+
+# 1Panel 的「打开」承载页。
+# 商店的打开按钮 = iframe 加载 `/cgi-bin/luci/<路由>`，而 1Panel 跑在独立端口上、
+# 不是 LuCI 页面，所以造一个同源承载页，由它再套一层 iframe 指向面板。
+# 面板地址从 `1pctl user-info` 动态读，端口或入口改了也不用动脚本。
+install_panel_page() {
+  local ctl=/usr/lib/lua/luci/controller/nradio_adv/kp1panel.lua
+  local dir=/usr/lib/lua/luci/view/nradio_kp1panel
+  mkdir -p "$dir"
+  cat > "$ctl" <<'CTLEOF'
+module("luci.controller.nradio_adv.kp1panel", package.seeall)
+
+function index()
+    entry({"nradioadv", "system", "kp1panel"}, template("nradio_kp1panel/panel"), nil, nil, true).leaf = true
+end
+CTLEOF
+  cat > "$dir/panel.htm" <<'HTMEOF'
+<%-
+local uci = require "luci.model.uci".cursor()
+local lan = uci:get("network", "lan", "ipaddr") or "192.168.66.1"
+local h = io.popen("1pctl user-info 2>/dev/null | grep -oE 'http://[^ ]*' | head -1")
+local url = h:read("*l") or ""
+h:close()
+url = url:gsub("%$LOCAL_IP", lan)
+if url == "" then url = "http://" .. lan .. ":10090" end
+-%>
+<div class="cbi-map" style="padding:0;margin:0">
+<iframe src="<%=url%>" style="width:100%;height:calc(100vh - 40px);border:0"></iframe>
+</div>
+HTMEOF
+  # 语法不对就撤销，绝不让商店页面因为我们的文件打不开
+  if ! lua -e "assert(loadfile('$ctl'))" >/dev/null 2>&1; then
+    rm -f "$ctl"
+    ui_warn "1Panel 承载页异常，已撤销"
+    return 0
+  fi
+  rm -rf /tmp/luci-modulecache /tmp/luci-indexcache
+  /etc/init.d/uhttpd restart >/dev/null 2>&1 || :
+}
+
 # 注册应用到鲲鹏商店（原生面板 → 应用中心）。
 # 真实机制（真机逆向确认）：
 #   · 商店目录 = /etc/config/appcenter（UCI），守护进程 /usr/sbin/appcenter 提供 ubus 接口
@@ -359,6 +434,9 @@ register_store() {
     uci set appcenter.$sec.has_luci='0'
     uci set appcenter.$sec.type='0'
   done
+
+  # 非 opkg 安装的应用（如 1Panel）算不出体积，调用方可用 STORE_SIZE_KB 指定
+  [ -n "${STORE_SIZE_KB:-}" ] && total=$STORE_SIZE_KB
 
   # --- 主条目（商店卡片）：size 单位是字节（与出厂条目一致） ---
   sec=$(uci add appcenter package)
@@ -700,9 +778,16 @@ EOF
   chmod 600 "$CRED"
   ui_ok "凭据写入 $CRED"
 
-  # 注意：1Panel 不注册进鲲鹏商店 —— 它不是 opkg 包，商店守护进程
-  # 按 `opkg info` 判状态会永远显示「未安装」，安装按钮还会去拉占位
-  # URL 报错。入口以凭据文件和 1pctl 为准。
+  # --- 注册进鲲鹏商店（原生面板 → 应用中心可见、可打开） ---
+  # 它不是 opkg 包，所以先补占位包让守护进程判得出「已安装」；
+  # 打开按钮走 install_panel_page() 造的同源承载页。
+  install_app_stub app-1panel "$(echo "$ONEPANEL_VER" | sed 's/^v//; s/-lts$//')" \
+    "Placeholder registering the 1Panel management panel (installed outside opkg) with the Kunpeng app center."
+  install_panel_page
+  STORE_SIZE_KB=$(du -sk /usr/local/bin/1panel 2>/dev/null | awk '{print $1}') || STORE_SIZE_KB=""
+  register_store 1Panel app_default.png \
+    "Linux 服务器运维管理面板，可视化管理 Docker 容器、文件与监控" \
+    "nradioadv/system/kp1panel" app-1panel
   ui_stage_end
 }
 
