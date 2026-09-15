@@ -35,6 +35,7 @@ set -eu
 : "${OC_LOCAL_IPK:=/tmp/oc.ipk}"              # 优先用这个本地 ipk，没有才联网下
 : "${PANEL_PORT:=10090}"                      # 面板端口（10086/87/88 已被固件占用）
 : "${PANEL_DIR:=/mnt/storage/data}"           # 数据根目录（放 p2 大分区，不吃 overlay）
+: "${DATA_DEV:=/dev/mmcblk0p2}"              # 数据分区设备，用于兜底挂载（见 ensure_data）
 : "${PANEL_USER:=admin}"
 : "${PANEL_PASS:=}"                           # 留空 = 随机生成
 : "${PANEL_ENT:=}"                            # 面板入口路径，留空 = 随机生成
@@ -92,6 +93,58 @@ mirrors() { echo "$1"; echo "https://ghfast.top/$1"; echo "https://gh-proxy.com/
 # 所以 1pctl 是凭据的唯一真相源（值里的 \ 是转义符，要还原）
 pv()    { sed -n "s/^$1=//p" /usr/local/bin/1pctl 2>/dev/null | head -n1 | sed 's/\\//g'; }
 
+# ---------------- 数据分区保障 ----------------
+# 为什么需要这一套：固件自带的热插拔脚本 /etc/hotplug.d/block/00-mount 会把
+# 新分区先挂到 /tmp/storage/<设备名> 下。它只在 ID_FS_PARTLABEL 等于
+# nradio_user_data 时才改挂到 /mnt/storage/data，而用 MBR 分区的表根本没有
+# PARTLABEL（实测 blkid -o udev 只给出 ID_FS_LABEL），这个判据永远不成立。
+# 随后 /etc/init.d/fstab 的 `block mount` 看到设备"已经被挂载"，就直接跳过 ——
+# 实测返回 0 但 /mnt/storage/data 始终是空的。所以这里自己兜底：先摘掉那处
+# 挂载，再挂到目标点；已经挂好则什么都不做。
+ensure_data() {
+  grep -q " $PANEL_DIR " /proc/mounts && return 0
+  for mp in $(grep "^$DATA_DEV " /proc/mounts | cut -d' ' -f2); do
+    umount "$mp" 2>/dev/null || :
+  done
+  mkdir -p "$PANEL_DIR"
+  mount -t f2fs -o noatime "$DATA_DEV" "$PANEL_DIR" 2>/dev/null || :
+}
+
+# 装一个开机自启的小服务，保证每次开机后数据分区都在目标点。
+# 只有它到位，dockerd 启动时数据根目录才真的落在卡上 —— 否则 dockerd 会在
+# overlay 上自建目录，overlay2 驱动失效（退化成 vfs，又慢又占空间）。
+# 幂等：已存在就只确保它是启用的，不覆盖。
+install_data_service() {
+  SVC=/etc/init.d/kp-storage
+  if [ -f "$SVC" ]; then
+    [ -x /etc/rc.d/S41kp-storage ] || "$SVC" enable >/dev/null 2>&1 || :
+    return 0
+  fi
+  cat > "$SVC" <<EOF
+#!/bin/sh /etc/rc.common
+# 由 nros-panel 生成：保证数据分区 $DATA_DEV 挂到 $PANEL_DIR
+# 原因见 kp-install.sh 里 ensure_data() 的注释（热插拔先占用，block mount 跳过）。
+# 排在 fstab（S40）之后执行。
+START=41
+
+start() {
+	grep -q " $PANEL_DIR " /proc/mounts && return 0
+	for mp in \$(grep "^$DATA_DEV " /proc/mounts | cut -d' ' -f2); do
+		umount "\$mp" 2>/dev/null
+	done
+	mkdir -p "$PANEL_DIR"
+	mount -t f2fs -o noatime "$DATA_DEV" "$PANEL_DIR" 2>/dev/null ||
+		logger -t kp-storage "挂载 $DATA_DEV 到 $PANEL_DIR 失败"
+}
+
+stop() {
+	umount "$PANEL_DIR" 2>/dev/null
+}
+EOF
+  chmod 755 "$SVC"
+  "$SVC" enable >/dev/null 2>&1 || ui_warn "kp-storage 开机自启未生效"
+}
+
 # 同步鲲鹏应用商店的 JSON 注册表（有 installed.list 才做）
 sync_store() {
   [ -f /etc/kp_store/installed.list ] || return 0
@@ -114,7 +167,13 @@ stage_env() {
 
   [ "$(id -u)" = 0 ] || ui_fail "必须以 root 运行"
   [ "$(uname -m)" = aarch64 ] || ui_fail "仅支持 aarch64，当前是 $(uname -m)"
-  grep -q " $PANEL_DIR " /proc/mounts || ui_fail "数据分区 $PANEL_DIR 未挂载" "先跑 kp-storage-init.sh，再 reboot"
+
+  # 数据分区：先兜底挂上，再装开机自启保障（见文件上方 ensure_data 的注释）
+  ensure_data
+  install_data_service
+  grep -q " $PANEL_DIR " /proc/mounts \
+    || ui_fail "数据分区 $PANEL_DIR 未挂载" "确认 TF 卡 p2 已格式化（跑过 kp-storage-init.sh）后 reboot"
+
   for t in curl tar gzip md5sum sha256sum; do have "$t" || ui_fail "缺少工具 $t"; done
 
   # 1) 换源。出厂 distfeeds 的 6 个源全部指向 downloads.openwrt.org 的

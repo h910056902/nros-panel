@@ -170,9 +170,14 @@ if [ -n "${SCRIPT:-}" ]; then
   exit 0
 fi
 
-if grep -q " $DATA_DIR " /proc/mounts; then
+if [ "$(awk '$2=="/overlay"{print $1}' /proc/mounts)" = "${DISK}p1" ]; then
   # ---------- 存储就绪：直接安装 ----------
-  echo "  ✓ 存储已就绪（$DATA_DIR）"
+  # 判据刻意用「/overlay 是不是由这张卡的 p1 承载」，而不是「/mnt/storage/data
+  # 挂上了没」。后者不可靠：固件热插拔会把数据分区先挂到 /tmp/storage/<设备名>，
+  # 之后 /etc/init.d/fstab 的 block mount 看到设备"已被挂载"就跳过，目标点可以
+  # 一直空着（实测 block mount 返回 0 却没挂上）。用设备名判断则与厂商
+  # sd.lua 里 action_get_partinfo 的判定方式一致。
+  echo "  ✓ 存储已就绪（/overlay 在 ${DISK}p1）"
   echo
   run kp-install.sh || {
     echo

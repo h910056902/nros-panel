@@ -98,9 +98,9 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 
 ---
 
-## 三个绕不开的硬事实
+## 几个绕不开的硬事实
 
-这一套脚本的很多"奇怪写法"，都是被下面三条逼出来的。改脚本前请先读这段。
+这一套脚本的很多"奇怪写法"，都是被下面几条逼出来的。改脚本前请先读这段。
 
 ### 1. 出厂 opkg 源整体失效，必须全换
 
@@ -166,6 +166,33 @@ src/gz openwrt_routing  https://mirrors.aliyun.com/openwrt/releases/21.02.7/pack
 > 已实测 busybox `cp -a` 能完整保留字符设备，所以新 overlay 的行为与当前
 > 完全一致，那批脚本不会重跑。漏掉它们的话，`10_migrate-shadow` 这类脚本
 > 会重新执行，有动 root 密码的风险。
+
+### 4. "存储是否就绪"不能看 `/mnt/storage/data`
+
+固件的热插拔脚本 `/etc/hotplug.d/block/00-mount` 会在分区刚出现时把它先挂到
+`/tmp/storage/<设备名>` 下。之后 `/etc/init.d/fstab`（S40）执行 `block mount`
+时，fstools 看到设备**已经被挂载**，就直接跳过这一条 ——
+**实测 `block mount` 返回 0，但 `/mnt/storage/data` 始终是空的。**
+
+（根因：热插拔里那句判据用的是 `ID_FS_PARTLABEL`，而 MBR 分区表没有 PARTLABEL。
+实测 `blkid -o udev /dev/mmcblk0p2` 只给出 `ID_FS_LABEL=nradio_user_data`。
+厂商自己的 `sd.lua` 用的是 `blkid --label`，两处判据不一致，属固件自身缺陷。）
+
+所以本套件做两件事：
+
+1. **就绪判据换成"`/overlay` 是否由这张卡的 p1 承载"**（`install.sh`），
+   和厂商 `sd.lua` 里 `action_get_partinfo` 的判定方式一致
+2. **自己保证数据分区到位**（`kp-install.sh`）：
+   - `ensure_data()`：先摘掉热插拔那处挂载，再挂到 `/mnt/storage/data`
+   - `install_data_service()`：生成并启用 `/etc/init.d/kp-storage`（`START=41`，
+     排在 fstab 之后），保证**每次开机**都挂好
+
+   > 这条服务是必需的，不是锦上添花：dockerd 启动时若 `/mnt/storage/data` 还没挂上，
+   > 它会在 overlay 上自建目录，`overlay2` 驱动失效、退化成 vfs。
+
+**如果续跑时看到「存储未就绪」但卡明明是好的** —— 那是就绪判据或 p2 挂载的问题，
+`kp-storage-init.sh` 的安全闸会拦下重复清卡（它检查 `/overlay` 是否已在这张卡上），
+不会造成数据损失。
 
 ---
 
@@ -255,7 +282,8 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 |---|---|
 | `缺少界面库 kp-ui.sh` | 主脚本按 `$0` 找同目录的界面库，只传主脚本会失败。两个一起传 |
 | `install.sh` 下载失败，但浏览器能打开 | 设备上 `curl` 直连 `raw.githubusercontent.com` 会失败（返回 000），**同一地址换 `wget` 就能拿到**。脚本已内置「curl/wget 双栈 + 三源回退」，一般无需干预 |
-| `数据分区 /mnt/storage/data 未挂载` | 先跑 `kp-storage-init.sh` 再 `reboot` |
+| `数据分区 /mnt/storage/data 未挂载` | 通常已由 `ensure_data()` 自动兜底。仍失败就手动 `umount /tmp/storage/mmcblk0p2 && mount -t f2fs /dev/mmcblk0p2 /mnt/storage/data`；持久化靠 `/etc/init.d/kp-storage`（见硬事实 4） |
+| 续跑时报「存储未就绪」但卡是好的 | 就绪判据已改为「`/overlay` 是否在 `/dev/mmcblk0p1`」。若仍出现，说明 `/overlay` 没切过来，检查 `/etc/config/fstab` 里那条 `/overlay` 的 `enabled` 是否为 `1` |
 | `dockerd 安装失败` | 看 `opkg update` 是否报源错误；源不对时先检查 `distfeeds.conf.kp-bak` |
 | 7890 未监听 | 多半是订阅或内核还没就绪，去 LuCI → OpenClash 完成一次配置 |
 | 面板端口未监听 | `logread \| grep 1panel`；端口冲突用 `PANEL_PORT=` 换一个 |
