@@ -205,6 +205,7 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 | 现象 | 原因 / 处理 |
 |---|---|
 | `缺少界面库 kp-ui.sh` | 主脚本按 `$0` 找同目录的界面库，只传主脚本会失败。两个一起传 |
+| `install.sh` 下载失败，但浏览器能打开 | 设备上 `curl` 直连 `raw.githubusercontent.com` 会失败（返回 000），**同一地址换 `wget` 就能拿到**。脚本已内置「curl/wget 双栈 + 三源回退」，一般无需干预 |
 | `数据分区 /mnt/storage/data 未挂载` | 先跑 `kp-storage-init.sh` 再 `reboot` |
 | `dockerd 安装失败` | 看 `opkg update` 是否报源错误；源不对时先检查 `distfeeds.conf.kp-bak` |
 | 7890 未监听 | 多半是订阅或内核还没就绪，去 LuCI → OpenClash 完成一次配置 |

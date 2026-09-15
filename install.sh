@@ -33,12 +33,22 @@ TMP=/tmp/kp-nros
 : "${DISK:=/dev/mmcblk0}"                 # TF 卡设备
 : "${DATA_DIR:=/mnt/storage/data}"        # 数据分区挂载点（判断「存储是否就绪」靠它）
 
-# ---------------- 下载：三源回退（GitHub 直连 → ghfast → gh-proxy）----------------
+# ---------------- 下载 ----------------
+# 实测：本设备上 curl 直连 raw.githubusercontent.com 会失败（返回 000），
+# 同一地址换 wget 就能拿到 —— 两个工具的网络栈不一样，所以都要试一遍，
+# 别把一次源切换浪费在工具差异上。
 get() {
-  if command -v curl >/dev/null 2>&1; then curl -fsSL -m 180 -o "$2" "$1"
-  elif command -v wget >/dev/null 2>&1; then wget -q -T 180 -O "$2" "$1"
-  else echo "  ✗ 设备上没有 curl / wget：先执行 opkg update && opkg install curl" >&2; exit 1
+  HAS_DL=0
+  if command -v curl >/dev/null 2>&1; then
+    HAS_DL=1
+    curl -fsSL -m 180 -o "$2" "$1" && return 0
   fi
+  if command -v wget >/dev/null 2>&1; then
+    HAS_DL=1
+    wget -q -T 180 -O "$2" "$1" && return 0
+  fi
+  [ "$HAS_DL" = 1 ] || { echo "  ✗ 设备上没有 curl / wget：先 opkg update && opkg install curl" >&2; exit 1; }
+  return 1
 }
 
 fetch() {
@@ -90,13 +100,20 @@ fi
 
 # >>> kp-auto >>>
 # 新 overlay 就位后，把安装接着跑完；完成即自删，不会重复执行。
+# 这里同样走「三源 + curl/wget 双栈」，理由见上面 get() 的注释。
 (
   for i in 1 2 3 4 5 6 7 8 9 10; do
     ping -c1 -W2 223.5.5.5 >/dev/null 2>&1 && break
     sleep 10
   done
   sleep 10
-  curl -fsSL -m 180 "$RAW/install.sh" | sh >>/tmp/kp-auto.log 2>&1
+  for u in "$RAW" "https://ghfast.top/$RAW" "https://gh-proxy.com/$RAW"; do
+    curl -fsSL -m 120 -o /tmp/kp-auto.sh "\$u/install.sh" 2>/dev/null ||
+      wget -q -T 120 -O /tmp/kp-auto.sh "\$u/install.sh" 2>/dev/null || continue
+    [ -s /tmp/kp-auto.sh ] || continue
+    sh /tmp/kp-auto.sh >>/tmp/kp-auto.log 2>&1
+    break
+  done
   sed -i '/kp-auto/d' /etc/rc.local
 ) &
 # <<< kp-auto <<<
