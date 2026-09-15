@@ -233,20 +233,80 @@ config_dockerd() {
   fi
 }
 
-# 同步鲲鹏应用商店的 JSON 注册表（有 installed.list 才做）
-sync_store() {
-  [ -f /etc/kp_store/installed.list ] || return 0
-  lua -e '
-    local c, t = require "luci.jsonc", {}
-    for l in io.lines("/etc/kp_store/installed.list") do
-      local p = {}
-      for v in l:gmatch("[^|]+") do p[#p+1] = v end
-      if #p >= 9 then t[#t+1] = { id=p[1], name=p[2], pkg=p[3], ver=p[4], ts=p[5],
-        route=p[6] == "-" and "" or p[6], source=p[7], des=p[8],
-        open_url=p[9] == "-" and "" or p[9] } end
-    end
-    io.open("/etc/kp_store/plugins.json","w"):write(c.stringify(t))' 2>/dev/null \
-    || ui_warn "plugins.json 同步失败（不影响使用）"
+# 注册应用到鲲鹏商店（原生面板 → 应用中心）。
+# 真实机制（真机逆向确认）：
+#   · 商店目录 = /etc/config/appcenter（UCI），守护进程 /usr/sbin/appcenter 提供 ubus 接口
+#   · 「已安装」状态由守护进程对 package_list 里每个包名跑 `opkg info` 实时判定，
+#     所以只要包真的装了，状态就一定是准的 —— 不造假、无需手动维护
+#   · 「卸载」按钮会真跑 `opkg remove`，行为一致
+# 用法：register_store <显示名> <图标名> <描述> <子包1> [子包2 ...]
+# 幂等：先把同名旧条目删干净再重写，版本/体积每次取实时值。
+register_store() {
+  local app="$1" icon="$2" des="$3" && shift 3
+  have uci || return 0
+  [ -x /usr/sbin/appcenter ] || { ui_warn "应用商店组件不存在，跳过 $app 注册"; return 0; }
+
+  # 图标：优先用应用自带 logo（调用方先拷进商店图标目录），缺失则回退默认图标
+  local icon_dir=/www/luci-static/nradio/images/icon
+  [ -f "$icon_dir/$icon" ] || icon=app_default.png
+
+  # --- 删旧条目（删除会让索引左移，所以只在没删时才 ++） ---
+  local i=0 sec
+  while uci -q get appcenter.@package[$i] >/dev/null 2>&1; do
+    if [ "$(uci -q get appcenter.@package[$i].name)" = "$app" ]; then
+      uci delete appcenter.@package[$i]
+    else
+      i=$((i+1))
+    fi
+  done
+  i=0
+  while uci -q get appcenter.@package_list[$i] >/dev/null 2>&1; do
+    if [ "$(uci -q get appcenter.@package_list[$i].parent)" = "$app" ]; then
+      uci delete appcenter.@package_list[$i]
+    else
+      i=$((i+1))
+    fi
+  done
+
+  # --- 子包条目：包名/版本/体积全部取 opkg 实时值，status 由守护进程自己判 ---
+  local pkg ver size total=0 first_ver=""
+  for pkg in "$@"; do
+    ver=$(opkg info "$pkg" 2>/dev/null | awk '/^Version:/{print $2; exit}')
+    [ -n "$ver" ] || ver=unknown
+    [ -n "$first_ver" ] || first_ver=$ver
+    size=$(opkg files "$pkg" 2>/dev/null | sed 1d | xargs du -ck 2>/dev/null | awk '/total$/{print $1; exit}')
+    [ -n "$size" ] || size=0
+    total=$((total + size))
+    sec=$(uci add appcenter package_list)
+    uci set appcenter.$sec.name="$pkg"
+    uci set appcenter.$sec.pkg_name="$pkg"
+    uci set appcenter.$sec.parent="$app"
+    uci set appcenter.$sec.size="$((size * 1024))"
+    uci set appcenter.$sec.version="$ver"
+    uci set appcenter.$sec.has_luci='0'
+    uci set appcenter.$sec.type='0'
+  done
+
+  # --- 主条目（商店卡片）：size 单位是字节（与出厂条目一致） ---
+  sec=$(uci add appcenter package)
+  uci set appcenter.$sec.name="$app"
+  uci set appcenter.$sec.version="$first_ver"
+  uci set appcenter.$sec.icon="$icon"
+  uci set appcenter.$sec.des="$des"
+  uci set appcenter.$sec.size="$((total * 1024))"
+  uci set appcenter.$sec.status='1'
+  uci set appcenter.$sec.has_luci='1'
+  uci set appcenter.$sec.open='0'
+  uci commit appcenter
+
+  # --- 重启守护进程让 ubus 列表生效，并验证 ---
+  /etc/init.d/appcenter restart >/dev/null 2>&1 || :
+  sleep 2
+  if ubus call appcenter list 2>/dev/null | grep -q "\"name\": \"$app\""; then
+    ui_ok "已注册鲲鹏商店：$app（原生面板 → 应用中心可见）"
+  else
+    ui_warn "$app 商店注册未生效（不影响应用本身）"
+  fi
 }
 
 # ============================== [1/4] 预检与换源 ==============================
@@ -443,6 +503,16 @@ EOF
       OC_STAT="$OC_STAT（待订阅）"
     fi
   fi
+
+  # --- 注册进鲲鹏商店（原生面板 → 应用中心）---
+  #    顺手把 OpenClash 自带 logo 拷成商店图标；包状态由商店守护进程
+  #    按 opkg 实时判定，卸载按钮也是真卸载，行为完全一致。
+  cp -f /www/luci-static/resources/openclash/img/logo.png \
+        /www/luci-static/nradio/images/icon/openclash.png 2>/dev/null || :
+  register_store OpenClash openclash.png \
+    "Clash Meta 内核的代理客户端，支持订阅管理与规则分流" \
+    luci-app-openclash pkg-openclash-dep
+
   ui_stage_end
 }
 
@@ -556,13 +626,9 @@ EOF
   chmod 600 "$CRED"
   ui_ok "凭据写入 $CRED"
 
-  # 注册到鲲鹏应用商店（没有 kp_store 就跳过）
-  if [ -f /etc/kp_store/installed.list ] && ! grep -q '^1panel|' /etc/kp_store/installed.list; then
-    echo "1panel|1Panel 管理面板|docker|$ONEPANEL_VER|$(date +%s)|-|docker|容器/应用/文件/监控运维面板|http://$LAN_IP:$PANEL_PORT/$PANEL_ENT" \
-      >> /etc/kp_store/installed.list
-    sync_store
-    ui_ok "已注册鲲鹏应用商店入口"
-  fi
+  # 注意：1Panel 不注册进鲲鹏商店 —— 它不是 opkg 包，商店守护进程
+  # 按 `opkg info` 判状态会永远显示「未安装」，安装按钮还会去拉占位
+  # URL 报错。入口以凭据文件和 1pctl 为准。
   ui_stage_end
 }
 
