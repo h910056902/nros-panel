@@ -378,9 +378,39 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 | 拉镜像超时（`registry-1.docker.io` 无响应） | 镜像加速必须写在 UCI：`uci show dockerd.globals.registry_mirrors`，空的就是没配上（见硬事实 5） |
 | `Docker Root Dir` 是 `/opt/docker` 或驱动是 `vfs` | 数据分区没挂上，或配置写到了 `daemon.json`（没人读）。先看 `/etc/config/fstab` 与 `mount \| grep storage` |
 | `failed to add the host <=> sandbox (veth...) pair interfaces` | 内核没有 veth，容器**只能**用 `--network host`（见已知边界） |
-| 7890 未监听 | 多半是订阅或内核还没就绪，去 LuCI → OpenClash 完成一次配置 |
+| 7890 未监听 | 多半是订阅或内核还没就绪，去 LuCI → OpenClash 完成一次配置。**没配置文件时脚本不会空等**（旧版会白等 1 分钟） |
 | 面板端口未监听 | `logread \| grep 1panel`；端口冲突用 `PANEL_PORT=` 换一个 |
 | 卡识别不到 | 断电 30 秒 → 取出卡擦净金手指 → 重插到底（软件层无解：3.3V 是 fixed 稳压器，没软件开关） |
+| **某个阶段无任何报错就中断了** | 撞上 `set -e` 静默退出。三个脚本都装了 ERR 陷阱，会打印 `✗ 脚本在第 N 行中断（rc=）`；按行号看是不是 `X=$(cmd)` 少写了 `\|\| X=""`（见下） |
+
+### 改脚本前必读：`set -e` 会静默退出
+
+三个脚本都开了 `set -eu`。`set -e` 下**任何命令返回非 0 都会让脚本无声退出**。
+本套件已经踩过两次，两条规则：
+
+1. **禁用 `cmd && break` / `[ x ] && {...}`** —— 条件为假时整条 AND-list 返回非 0，直接退出。
+   一律写成 `if ...; then ...; fi`
+2. **每个 `X=$(cmd)` 后面都跟 `|| X=""`** —— 纯赋值语句的退出码 = 命令替换的退出码。
+   典型凶手：`uci -q get <未设置的键>` 返回 1
+
+三个脚本头部都有这道防线（让中断不再无声）：
+
+```sh
+trap 'rc=$?; echo "  ✗ 脚本在第 $LINENO 行中断（rc=$rc）" >&2' ERR || :
+```
+
+（`|| :` 不能省，否则陷阱自身返回非 0 会再次触发。）
+
+### 改完脚本要等 CDN 缓存过期再验
+
+`raw.githubusercontent.com` 有**约 5 分钟**缓存。刚 `push` 完就在设备上跑，
+拿到的还是旧脚本 —— 验证结果毫无意义（本套件因此误判过一次"优化没生效"）。
+先探测远端版本再跑：
+
+```sh
+wget -qO /tmp/_p.sh https://raw.githubusercontent.com/h910056902/nros-panel/main/kp-install.sh
+grep -cF 'ERR || :' /tmp/_p.sh     # 返回 1 说明已是新版
+```
 
 ---
 

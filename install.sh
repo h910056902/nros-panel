@@ -30,8 +30,9 @@
 # ============================================================================
 set -eu
 
-# set -e 下任何命令返回非 0 都会让脚本**静默退出**。中断时打出行号，便于定位。
-trap 'rc=$?; echo "" >&2; echo "  ✗ 引导器在第 $LINENO 行中断（rc=$rc）" >&2' ERR || :
+# set -e 下任何命令返回非 0 都会让脚本**静默退出**。异常中断时至少报出退出码。
+# ⚠️ 不能用 `trap ... ERR`：busybox 的 ash 不认这个信号（报 invalid signal specification）。
+trap 'rc=$?; [ "$rc" = 0 ] || echo "  ✗ 引导器中断（rc=$rc）" >&2' EXIT
 
 REPO=h910056902/nros-panel
 BRANCH=main
