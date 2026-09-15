@@ -333,6 +333,42 @@ stage_openclash() {
     ui_warn "内核缺失：到 LuCI → OpenClash → 内核管理 下载，或检查 github_address_mod"
   fi
 
+  # --- 内核自检：把"内核就绪"从推断变成实测 ---
+  # 没有订阅时脚本只能停在"待订阅"，此时"内核能否真的跑起来"从未被验证过
+  # —— 万一内核跑不起来，填了订阅照样失败。这里用一份最小配置把内核真拉起
+  # 来验一次活，测完立刻 kill。
+  # 刻意避开 7890/9090（真实服务端口），且配置是 mode: direct、不开 tun、
+  # 不劫持 DNS、不加防火墙 —— 全程不碰网络设置，测完不留痕迹。
+  oc_selftest() {
+    [ -x "$OC_CORE" ] || return 1
+    local y=/tmp/oc-selftest.yaml pid= ok=0 i
+    printf 'mixed-port: 7899\nexternal-controller: 127.0.0.1:9099\nmode: direct\nlog-level: warning\n' > "$y"
+    "$OC_CORE" -f "$y" -d /tmp >/tmp/oc-selftest.log 2>&1 &
+    pid=$!
+    i=0
+    while [ "$i" -lt 10 ]; do
+      sleep 1
+      i=$((i + 1))
+      if curl -s -m 2 http://127.0.0.1:9099/version >/dev/null 2>&1; then ok=1; break; fi
+    done
+    kill "$pid" 2>/dev/null || :
+    sleep 1
+    kill -9 "$pid" 2>/dev/null || :
+    rm -f "$y" /tmp/oc-selftest.log
+    return $((1 - ok))
+  }
+
+  # 只在"还没有任何配置"时自检：有配置就说明服务本身能起，没必要多跑一次
+  if [ -z "$(ls /etc/openclash/config/*.yaml 2>/dev/null)" ] \
+     && [ -z "$(uci -q get openclash.config.config_path)" ]; then
+    if oc_selftest; then
+      ui_ok "内核自检通过（拉起→监听→响应，测完已清理）"
+      OC_SELFTEST=1
+    else
+      ui_warn "内核自检失败：二进制在但跑不起来，看 /tmp/oc-selftest.log"
+    fi
+  fi
+
   # --- 订阅：写进 UCI，然后调 OpenClash 自带脚本拉取 ---
   if [ -n "$SUB_URL" ] && ! uci show openclash 2>/dev/null | grep -qF "$SUB_URL"; then
     uci add openclash config_subscribe >/dev/null
@@ -401,7 +437,11 @@ EOF
     ui_warn "服务 $OC_STAT（配置与内核都在，但没起来 —— 看 logread | grep -i clash）"
   else
     ui_warn "服务 $OC_STAT —— 缺配置文件，去 LuCI → OpenClash 填订阅后即可启动"
-    OC_STAT="$OC_STAT（待订阅）"
+    if [ "${OC_SELFTEST:-0}" = 1 ]; then
+      OC_STAT="$OC_STAT（内核已验活，只差订阅）"
+    else
+      OC_STAT="$OC_STAT（待订阅）"
+    fi
   fi
   ui_stage_end
 }

@@ -95,7 +95,7 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 | 阶段 | 做什么 | 关键点 |
 |---|---|---|
 | `[1/4]` 预检与换源 | 修 opkg 源、确保 bash、建 `/tmp/lock`、兜底挂数据分区 | **出厂 6 个源全部指向已下线的 SNAPSHOT**，必须整体换（见下） |
-| `[2/4]` OpenClash | 装包 → 拉内核 → 配订阅 → 起服务 | 内核复用 `openclash_core.sh`，3 个 CDN 回退 |
+| `[2/4]` OpenClash | 装包 → 拉内核 → **内核自检** → 配订阅 → 起服务 | 内核复用 `openclash_core.sh`，3 个 CDN 回退；**没有任何配置时会真把内核拉起来验一次活**（见硬事实 7） |
 | `[3/4]` Docker | 补 kmod 桩包 → 装包 → 写 **UCI** → 起服务 | data-root 必须落 p2，镜像源也只能写 UCI（见硬事实 5） |
 | `[4/4]` 1Panel | 装面板 → 播种凭据 → 验活 | **必须先写好 `1pctl` 再启动**（数据库由它播种） |
 
@@ -283,6 +283,34 @@ uci add_list dockerd.globals.registry_mirrors='https://docker.m.daocloud.io'
 **用一键脚本扩容更省事的办法**：`OVERLAY_SIZE=16G REBUILD=1 sh /tmp/kp.sh`
 （走的是重建流程，会清空卡，所以先把要留的数据拷出来）。
 
+### 7. 没订阅时，"内核就绪"只是推断 —— 所以加了内核自检
+
+没给 `SUB_URL` 时脚本只能停在"待订阅"，而此时**内核到底能不能跑起来从未被验证**；
+万一内核跑不起来，用户填完订阅照样失败，还得回头再查一遍。
+
+所以 `[2/4]` 在**确认没有任何配置文件**时，会真的把内核拉起来验一次活：
+
+```sh
+# 最小配置：直连模式，不开 tun、不劫持 DNS、不加防火墙
+mixed-port: 7899          # 刻意避开真实的 7890
+external-controller: 127.0.0.1:9099
+mode: direct
+```
+
+启动 → 轮询 `/version` 接口 → `kill` → 删临时文件。全程**不碰网络设置**，测完不留痕迹。
+
+实测（2026-09-15）在这台设备上的结果：
+
+| 项 | 实测 |
+|---|---|
+| 内核 | `Mihomo Meta alpha-ge183c58 linux arm64 with go1.26.5 · with_gvisor`，`-v` 正常 |
+| TUN | `modprobe tun` rc=0，`/dev/net/tun`（10, 200）存在 |
+| 起服务 | 7890/9090 正常监听，`/version` 返回 `{"meta":true, ...}` |
+| 实际转发 | `curl -x http://127.0.0.1:7890 http://www.baidu.com` → **200，0.09s** |
+
+→ 结论：**这台设备上 OpenClash 唯一缺的就是订阅**。自检通过后汇总会显示
+`内核已验活，只差订阅`，而不是含糊的 `待订阅`。
+
 ---
 
 ## 与厂商官方方案对齐（读固件源码得来）
@@ -375,6 +403,7 @@ pscp -scp kp-ui.sh kp-install.sh root@192.168.66.1:/tmp/
 | 续跑时报「存储未就绪」但卡是好的 | 就绪判据已改为「`/overlay` 是否在 `/dev/mmcblk0p1`」。若仍出现，说明 `/overlay` 没切过来，检查 `/etc/config/fstab` 里那条 `/overlay` 的 `enabled` 是否为 `1` |
 | `dockerd 安装失败` | 看 `opkg update` 是否报源错误；源不对时先检查 `distfeeds.conf.kp-bak` |
 | `Unknown package 'dockerd'` / `...incompatible with the architectures configured` | **不是架构问题，是 kmod 依赖选不出候选包**（见硬事实 2）。确认 `install_kmod_stub()` 跑过：`opkg status kmod-kp-stub` |
+| `内核自检失败`（二进制在但跑不起来） | 看 `/tmp/oc-selftest.log`；多半是内核版本与 CPU 不匹配，去 LuCI → OpenClash → 内核管理 重下 |
 | 拉镜像超时（`registry-1.docker.io` 无响应） | 镜像加速必须写在 UCI：`uci show dockerd.globals.registry_mirrors`，空的就是没配上（见硬事实 5） |
 | `Docker Root Dir` 是 `/opt/docker` 或驱动是 `vfs` | 数据分区没挂上，或配置写到了 `daemon.json`（没人读）。先看 `/etc/config/fstab` 与 `mount \| grep storage` |
 | `failed to add the host <=> sandbox (veth...) pair interfaces` | 内核没有 veth，容器**只能**用 `--network host`（见已知边界） |
