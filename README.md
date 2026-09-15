@@ -48,6 +48,9 @@ PANEL_PORT=10091 sh /tmp/kp.sh
 # 卡上确实有要留的数据，仍然强制重建（默认会被安全闸拦下）
 FORCE=1 sh /tmp/kp.sh
 
+# 做完先别重启，人工核对卡上内容后再手动 reboot（首次上手建议用它）
+NO_REBOOT=1 sh /tmp/kp.sh
+
 # 只跑某一个脚本，跳过自动判断
 SCRIPT=kp-install.sh sh /tmp/kp.sh
 ```
@@ -63,6 +66,7 @@ SCRIPT=kp-install.sh sh /tmp/kp.sh
 | `PANEL_DIR` | `/mnt/storage/data` | 数据根目录（放 p2 大分区，不吃 overlay） |
 | `SKIP` | 空 | 逗号分隔要跳过的阶段：`oc,docker,panel` |
 | `FORCE` | `0` | `1` = 卡上确实有数据也要重建 |
+| `NO_REBOOT` | `0` | `1` = 做完不自动重启，便于先核对卡上内容再手动 `reboot` |
 | `OVERLAY_SIZE` | `4G` | p1（系统可写层）容量 |
 
 ---

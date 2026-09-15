@@ -13,6 +13,7 @@
 #      SUB_URL=https://机场订阅   顺带把订阅也配好
 #      PANEL_PORT=10091           换 1Panel 端口
 #      FORCE=1                    卡上确实有数据，也要重建
+#      NO_REBOOT=1                做完不自动重启，便于人工核对后再手动 reboot
 #      SCRIPT=kp-install.sh       只跑指定脚本（跳过自动判断）
 #
 #  仓库文件分工：
@@ -32,6 +33,7 @@ TMP=/tmp/kp-nros
 # 可用环境变量覆盖
 : "${DISK:=/dev/mmcblk0}"                 # TF 卡设备
 : "${DATA_DIR:=/mnt/storage/data}"        # 数据分区挂载点（判断「存储是否就绪」靠它）
+: "${NO_REBOOT:=0}"                       # 1 = 跳过自动重启（核对后再手动 reboot）
 
 # ---------------- 下载 ----------------
 # 实测：本设备上 curl 直连 raw.githubusercontent.com 会失败（返回 000），
@@ -68,7 +70,7 @@ fetch() {
 pass() {
   for v in FORCE SUB_URL SUB_NAME SUB_UA CORE_TYPE OC_VER PANEL_PORT PANEL_DIR \
            PANEL_USER PANEL_PASS PANEL_ENT SKIP DOCKER_ENABLE_BRIDGE \
-           DISK OVERLAY_SIZE DATA_DIR; do
+           DISK OVERLAY_SIZE DATA_DIR NO_REBOOT; do
     eval "val=\${$v:-}"
     if [ -n "$val" ]; then export "$v=$val"; fi
   done
@@ -191,6 +193,10 @@ else
   }
   arm_auto || { echo "  ✗ 续跑预置失败 —— 请手动 reboot，起来后重跑同一条命令" >&2; exit 1; }
   echo
+  if [ "$NO_REBOOT" = 1 ]; then
+    echo ">>> NO_REBOOT=1：已跳过自动重启。核对无误后手动执行 reboot 即可。"
+    exit 0
+  fi
   echo ">>> 10 秒后自动重启"
   echo ">>> 重启后会自动接着装，进度： ssh 进来 tail -f /tmp/kp-auto.log"
   sleep 10
