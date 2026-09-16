@@ -95,7 +95,13 @@ port()  { netstat -lnt 2>/dev/null | grep -q ":$1 "; }
 poll()  { n=$1; shift; while [ "$n" -gt 0 ]; do "$@" >/dev/null 2>&1 && return 0; n=$((n-1)); sleep 2; done; return 1; }
 
 # 装包（已装则跳过），天然幂等
-pkg()   { opkg status "$1" 2>/dev/null | grep -q 'install ok installed' && return 0; opkg install "$@"; }
+# 判据必须是 `Status:`，不能是 `Status: install ok installed`：OpenWrt 的 opkg 用
+# 第三个字段区分安装来源 —— `install ok installed`（依赖/系统装）与
+# `install user installed`（用户显式装）。实测本机 296 / 273 个包分属两类，
+# 写死前者会把所有"用户显式装"的包（docker、dockerd、docker-compose、
+# zoneinfo-asia、app-1panel …）判成未装，每次重跑都白跑一次 opkg install；
+# 源不通时就变成一条误导性的失败/警告。
+pkg()   { opkg status "$1" 2>/dev/null | grep -q 'Status:' && return 0; opkg install "$@"; }
 
 # 下载：curl 优先，wget 兜底
 get()   { if have curl; then curl -fsSL -m 600 -o "$2" "$1"; else wget -q -T 600 -O "$2" "$1"; fi; }
