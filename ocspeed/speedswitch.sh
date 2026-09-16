@@ -36,6 +36,18 @@ mkdir -p $DIR $DATA
 
 log() { echo "$(date '+%F %T') [$1] $2" >> $LOG; }
 
+# JSON 字符串转义。
+# 节点名 / 策略组名 / 站点 URL 都是外部数据，直接拼进 JSON 正文时，一个 " 或 \
+# 就能让整个文件解析失败 —— 页面退化成「暂无数据」，切换到 mihomo 的请求也会
+# 被当成非法 JSON 拒绝。URL 场景早就有 urlenc()，JSON 正文却一直没有对应处理。
+# 实测本机场的节点名是 "L1|新加坡05|中转|流媒体|4x" 这种不含引号的格式，所以
+# 至今没爆过；换一个用引号/反斜杠命名的机场就会立刻出问题。
+#   · \ 与 " 必须转义（改成 \\ 和 \"），否则 JSON 结构被破坏
+#   · TAB / 换行 / 回车直接删除：它们是 JSON 字符串里不允许的裸控制字符。
+#     代价是名字会被改动 —— 但本套件全流程用 TAB 作字段分隔符，含 TAB 的名字
+#     在上游 collect_all_nodes 解析 TSV 时就已经表达不了了，这一层不必再兜。
+json_esc() { printf '%s' "$1" | tr -d '\n\r\t' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
 # ---- $DATA/running 生命周期 ----
 # 背景: running 放在 overlay 上, 被 kill / 掉电后不会消失, 而互斥用的 $DIR/lock 在
 # tmpfs 上、重启即清。二者不一致 -> 一次异常退出就会让 backup_select 和 failover_check
@@ -179,8 +191,13 @@ collect_all_nodes() {
   : > $DIR/allnodes.txt
   TAB=$(printf '\t')
   while IFS="$TAB" read -r name alive type; do
+    # 只收「真实出站节点」类型，策略组（Selector/URLTest/Fallback/LoadBalance/
+    # Relay/Direct/Reject…）必须排除，否则会拿组名去测延迟。
+    # 这份名单要跟着 mihomo 走：漏掉新协议 = 该类节点一个都进不了候选池，
+    # 表现为"机场明明有 60 个节点，测速只认 44 个"，且日志里毫无线索。
     case "$type" in
-      Vless|Vmess|Trojan|Hysteria|Hysteria2|TUIC|WireGuard|Snell|Shadowsocks|SS|SSR|Socks5|Http) ;;
+      Vless|Vmess|Trojan|Hysteria|Hysteria2|TUIC|WireGuard|Snell|Shadowsocks|SS|SSR|Socks5|Http \
+      |AnyTLS|Mieru|SSH|Shadowtls) ;;
       *) continue ;;
     esac
     printf '%s\t%s\t%s\n' "$name" "$type" "$alive" >> $DIR/allnodes.txt
@@ -253,9 +270,11 @@ build_nodes_json() {
     [ $first -eq 0 ] && printf ',' >> $DATA/nodes.json
     first=0
     if [ -n "$d" ]; then
-      printf '{"n":"%s","t":"%s","a":%s,"d":%s,"s":"%s"}' "$name" "$type" "$alive" "$d" "$s" >> $DATA/nodes.json
+      printf '{"n":"%s","t":"%s","a":%s,"d":%s,"s":"%s"}' \
+        "$(json_esc "$name")" "$(json_esc "$type")" "$alive" "$d" "$s" >> $DATA/nodes.json
     else
-      printf '{"n":"%s","t":"%s","a":%s,"d":null,"s":"%s"}' "$name" "$type" "$alive" "$s" >> $DATA/nodes.json
+      printf '{"n":"%s","t":"%s","a":%s,"d":null,"s":"%s"}' \
+        "$(json_esc "$name")" "$(json_esc "$type")" "$alive" "$s" >> $DATA/nodes.json
     fi
   done < $DIR/allnodes.txt
   printf ']}' >> $DATA/nodes.json
@@ -337,7 +356,7 @@ build_sites_json() {
   # 先写临时文件再 mv: 页面直接读这个文件, 中途崩溃留下的半截 JSON
   # 会让分类表整块退化成「暂无数据」, 而 mv 是原子的。
   {
-    printf '{"ts":%s,"group":"%s","cats":' "$(date +%s)" "$grp"
+    printf '{"ts":%s,"group":"%s","cats":' "$(date +%s)" "$(json_esc "$grp")"
     json_strarray $DIR/site_cats.txt
     printf ',"sites":'
     json_strarray $DIR/site_disp.txt
@@ -348,7 +367,7 @@ build_sites_json() {
     while read -r name; do
       [ -z "$name" ] && continue
       [ $j -gt 0 ] && printf ','
-      printf '{"n":"%s","d":[' "$name"
+      printf '{"n":"%s","d":[' "$(json_esc "$name")"
       local k=0
       while read -r s; do
         k=$((k+1))
@@ -471,7 +490,7 @@ speedtest_full() {
         log run "当前 $now 初赛无结果(失效或被排除), 将切到 $best (初赛${bestd}ms)"
       fi
       if [ $dosw -eq 1 ]; then
-        curl -s -m 8 -X PUT -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d "{\"name\":\"$best\"}" "$API/proxies/$group" >/dev/null 2>&1
+        curl -s -m 8 -X PUT -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d "{\"name\":\"$(json_esc "$best")\"}" "$API/proxies/$group" >/dev/null 2>&1
         switched=1
         # 日志补齐 curd1, 事后才分得清「真的更快」还是「当前节点决赛没测出来」
         log run "已切换 $group: $now (初赛${curd1:-无}) -> $best (初赛${bestd}ms, 决赛${bestfin})"
@@ -486,16 +505,16 @@ speedtest_full() {
   set_progress "switch" "计算最快节点并切换" 90
 
   # 状态 JSON: top 按初赛排名输出, d=初赛延迟(排名依据), f=决赛延迟(null=未过闸门)
-  printf '{"ts":%s,"group":"%s","now":"%s","switched":%s,"candidates":%s,"top":[' "$(date +%s)" "$group" "$best" "$switched" "$n_cand" > $DATA/status.json
+  printf '{"ts":%s,"group":"%s","now":"%s","switched":%s,"candidates":%s,"top":[' "$(date +%s)" "$(json_esc "$group")" "$(json_esc "$best")" "$switched" "$n_cand" > $DATA/status.json
   i=0
   while IFS="$TAB" read -r d nm; do
     [ -z "$nm" ] && continue
     fd=$(awk -F '\t' -v n="$nm" '$2==n{print $1; exit}' $DIR/stage2.txt 2>/dev/null)
     [ $i -gt 0 ] && printf ',' >> $DATA/status.json
     if [ -n "$fd" ]; then
-      printf '{"d":%s,"f":%s,"n":"%s"}' "$d" "$fd" "$nm" >> $DATA/status.json
+      printf '{"d":%s,"f":%s,"n":"%s"}' "$d" "$fd" "$(json_esc "$nm")" >> $DATA/status.json
     else
-      printf '{"d":%s,"f":null,"n":"%s"}' "$d" "$nm" >> $DATA/status.json
+      printf '{"d":%s,"f":null,"n":"%s"}' "$d" "$(json_esc "$nm")" >> $DATA/status.json
     fi
     i=$((i+1))
   done < $DIR/top5d.txt
@@ -523,11 +542,11 @@ write_backup_json() { # group now probed_count
   local group="$1" now="$2" probed="$3"
   local TAB=$(printf '\t')
   local j=0
-  printf '{"ts":%s,"group":"%s","now":"%s","probed":%s,"list":[' "$(date +%s)" "$group" "$now" "$probed" > $DATA/backup.json
+  printf '{"ts":%s,"group":"%s","now":"%s","probed":%s,"list":[' "$(date +%s)" "$(json_esc "$group")" "$(json_esc "$now")" "$probed" > $DATA/backup.json
   while IFS="$TAB" read -r d nm; do
     [ -z "$nm" ] && continue
     [ $j -gt 0 ] && printf ',' >> $DATA/backup.json
-    printf '{"n":"%s","d":%s}' "$nm" "$d" >> $DATA/backup.json
+    printf '{"n":"%s","d":%s}' "$(json_esc "$nm")" "$d" >> $DATA/backup.json
     j=$((j+1))
   done < $DIR/bak_top.txt
   printf ']}' >> $DATA/backup.json
@@ -729,7 +748,7 @@ failover_check() { # 断线自动故障转移
   fi
 
   if [ -n "$best" ]; then
-    curl -s -m 8 -X PUT -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d "{\"name\":\"$best\"}" "$API/proxies/$group" >/dev/null 2>&1
+    curl -s -m 8 -X PUT -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d "{\"name\":\"$(json_esc "$best")\"}" "$API/proxies/$group" >/dev/null 2>&1
     date +%s > $DATA/last_failover
     # 备用名单已被消耗 (切换目标成了新的当前节点), 下一分钟立刻重新预选
     rm -f $DATA/last_backup 2>/dev/null
@@ -781,12 +800,12 @@ web_status() {
   echo ','
   echo -n '"interval":"'; echo -n "$(get interval)"; echo '",'
   echo -n '"threshold":"'; echo -n "$(get threshold)"; echo '",'
-  echo -n '"group":"'; echo -n "$(get group)"; echo '",'
-  echo -n '"test_url":"'; echo -n "$(get test_url)"; echo '",'
-  echo -n '"gemini_url":"'; echo -n "$(get gemini_url)"; echo '",'
-  echo -n '"exclude":"'; echo -n "$(get exclude)"; echo '",'
+  echo -n '"group":"'; echo -n "$(json_esc "$(get group)")"; echo '",'
+  echo -n '"test_url":"'; echo -n "$(json_esc "$(get test_url)")"; echo '",'
+  echo -n '"gemini_url":"'; echo -n "$(json_esc "$(get gemini_url)")"; echo '",'
+  echo -n '"exclude":"'; echo -n "$(json_esc "$(get exclude)")"; echo '",'
   now=$(api_get "/proxies/$(get group)" 2>/dev/null | grep -o '"now":"[^"]*"' | head -1 | cut -d'"' -f4)
-  echo -n '"current":"'; echo -n "$now"; echo '",'
+  echo -n '"current":"'; echo -n "$(json_esc "$now")"; echo '",'
   echo -n '"last":'
   cat $DATA/status.json 2>/dev/null || echo 'null'
   echo ','
@@ -801,7 +820,10 @@ web_status() {
   fi
   echo -n '"history":['
   if [ -f $DATA/history.log ]; then
-    tail -10 $DATA/history.log | sed 's/^/"/; s/$/"/' | tr '\n' ',' | sed 's/,$//'
+    # 逐行转义后再包引号：日志行里含节点名，直接 sed 's/^/"/' 遇到引号就破 JSON
+    tail -10 $DATA/history.log | while IFS= read -r hl; do
+      printf '"%s",' "$(json_esc "$hl")"
+    done | sed 's/,$//'
   fi
   echo ']'
   echo '}'
@@ -812,14 +834,14 @@ testnode() {
   local sites=$(get testsites)
   [ -z "$sites" ] && sites='https://www.baidu.com|https://www.bilibili.com|https://www.taobao.com|https://www.qq.com|https://www.google.com|https://www.youtube.com|https://www.netflix.com|https://github.com|https://gemini.google.com|https://chatgpt.com|https://claude.ai'
   printf '%s' "$sites" | tr '|' '\n' | grep . > $DIR/tsites.list
-  printf '{"node":"%s","results":[' "$name"
+  printf '{"node":"%s","results":[' "$(json_esc "$name")"
   local i=0
   while read -r s; do
     [ -z "$s" ] && continue
     local label=$(echo "$s" | sed 's|https://||; s|/.*||; s|^www\.||')
     local d=$(node_delay "$name" "$s" 2000)
     [ $i -gt 0 ] && printf ','
-    if [ -n "$d" ]; then printf '{"site":"%s","d":%s}' "$label" "$d"; else printf '{"site":"%s","d":null}' "$label"; fi
+    if [ -n "$d" ]; then printf '{"site":"%s","d":%s}' "$(json_esc "$label")" "$d"; else printf '{"site":"%s","d":null}' "$(json_esc "$label")"; fi
     i=$((i+1))
   done < $DIR/tsites.list
   printf ']}'
@@ -828,7 +850,7 @@ testnode() {
 switchnode() {
   local name="$1"
   local group=$(get group); [ -z "$group" ] && group='宝贝云'
-  curl -s -m 8 -X PUT -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d "{\"name\":\"$name\"}" "$API/proxies/$group"
+  curl -s -m 8 -X PUT -H "Authorization: Bearer $SECRET" -H 'Content-Type: application/json' -d "{\"name\":\"$(json_esc "$name")\"}" "$API/proxies/$group"
 }
 
 case "$1" in

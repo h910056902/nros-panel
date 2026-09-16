@@ -46,6 +46,26 @@ LUA_VIEW=/usr/lib/lua/luci/view
 : "${OCS_STORE:=1}"                  # 1 = 注册进鲲鹏商店（0 可跳过）
 : "${OCS_ICON:=ocspeed.png}"
 
+# ---------------- 下载 ----------------
+# 实测本设备 curl 直连 raw.githubusercontent.com 返回 000，wget 却能通；
+# 再叠两个镜像源做兜底。别把失败浪费在工具差异上。
+# ⚠️ 这个定义必须排在最前面：下面"补下共享库"那段就要用它。原先它写在
+#    调用点之后，shell 是顺序解释的 —— 那一整个补下逻辑其实一次都没生效过
+#    （get: not found），单独跑本脚本时只会静默降级成"跳过商店注册"。
+get() {
+  HAS_DL=0
+  if command -v curl >/dev/null 2>&1; then
+    HAS_DL=1
+    curl -fsSL -m 180 -o "$2" "$1" && return 0
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    HAS_DL=1
+    wget -q -T 180 -O "$2" "$1" && return 0
+  fi
+  [ "$HAS_DL" = 1 ] || { echo "  ✗ 设备上没有 curl / wget" >&2; exit 1; }
+  return 1
+}
+
 KP_DIR=${0%/*}; [ "$KP_DIR" = "$0" ] && KP_DIR=.     # 脚本所在目录，不依赖 dirname
 
 # 商店注册实现在共享库里（kp-install.sh 也用同一份）。由 install.sh 调度时
@@ -62,23 +82,6 @@ else
   OCS_STORE=0
   echo "  ! 拿不到 kp-store-lib.sh，跳过商店注册（自动测速本身照常安装）"
 fi
-
-# ---------------- 下载 ----------------
-# 实测本设备 curl 直连 raw.githubusercontent.com 返回 000，wget 却能通；
-# 再叠两个镜像源做兜底。别把失败浪费在工具差异上。
-get() {
-  HAS_DL=0
-  if command -v curl >/dev/null 2>&1; then
-    HAS_DL=1
-    curl -fsSL -m 180 -o "$2" "$1" && return 0
-  fi
-  if command -v wget >/dev/null 2>&1; then
-    HAS_DL=1
-    wget -q -T 180 -O "$2" "$1" && return 0
-  fi
-  [ "$HAS_DL" = 1 ] || { echo "  ✗ 设备上没有 curl / wget" >&2; exit 1; }
-  return 1
-}
 
 fetch_oc() {
   # 已由 install.sh 下好的直接复用，省一次网络往返
@@ -124,12 +127,14 @@ else
   echo "  · 已有 /etc/config/ocspeed，保留原值"
 fi
 
-# 目标策略组缺省时猜一个：优先用订阅里已有的 Selector 组
+# 目标策略组：只有显式传了 OCS_GROUP 才覆盖，否则沿用 /etc/config/ocspeed 里的值。
+# （原先这里还有一个 GUESS=$(uci -q get openclash.config.config_path) —— 赋值后
+#  从未被使用，纯粹是残留代码，而且 config_path 是配置文件路径、不是策略组名，
+#  留着只会让人误以为"猜过策略组"。）
 if [ -n "$OCS_GROUP" ]; then
   uci -q set ocspeed.main.group="$OCS_GROUP"
 elif [ -z "$(uci -q get ocspeed.main.group)" ]; then
-  GUESS=$(uci -q get openclash.config.config_path 2>/dev/null)
-  echo "  ! 未指定 OCS_GROUP，沿用配置里的值（可在页面里改）"
+  echo "  ! 未指定 OCS_GROUP，且 ocspeed 里也没存过 —— 去页面里点选一个策略组"
 fi
 [ -n "$OCS_INTERVAL" ] && uci -q set ocspeed.main.interval="$OCS_INTERVAL"
 uci -q set ocspeed.main.enabled="$OCS_ENABLE"

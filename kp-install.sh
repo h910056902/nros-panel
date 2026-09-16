@@ -277,6 +277,9 @@ stage_env() {
   #    取不到东西，还会让每次 opkg update 卡在超时上。真缺 kmod 依赖时，
   #    用 --force-depends 跳过（本机用不到 veth / br_netfilter，见 Docker 段）。
   F=/etc/opkg/distfeeds.conf
+  # 先确认文件在：下面那句 cp 是裸命令，set -e 下源文件缺失会**无声退出**，
+  # 连"这个固件的布局不一样"都提示不出来。
+  [ -f "$F" ] || ui_fail "找不到 $F" "这不是预期中的 OpenWrt 布局，请手动确认 opkg 源"
   [ -f "$F.kp-bak" ] || cp "$F" "$F.kp-bak"          # 只备份一次，方便还原
   if grep -q "21.02-SNAPSHOT" "$F"; then
     cat > "$F" <<EOF
@@ -395,7 +398,8 @@ stage_openclash() {
   # ⚠️ 每处 `X=$(cmd)` 后面都必须跟 `|| X=""`：本脚本开了 set -e，而
   #    「纯赋值语句的退出码 = 命令替换的退出码」—— uci get 对未设置的键返回 1，
   #    不兜住就会让整个脚本**静默退出**（没有任何报错，最难查的一类）。
-  /etc/init.d/openclash enable
+  #    同理，任何可能失败的**裸命令**（不是 && / || 列表里的）也要带兜底。
+  /etc/init.d/openclash enable >/dev/null 2>&1 || ui_warn "OpenClash 开机自启未生效"
   OC_CONF=$(uci -q get openclash.config.config_path) || OC_CONF=""
   [ -n "$OC_CONF" ] || OC_CONF=$(ls /etc/openclash/config/*.yaml 2>/dev/null | head -n1) || OC_CONF=""
 
@@ -421,16 +425,12 @@ stage_openclash() {
     poll 30 port 7890 || ui_warn "7890 未监听（去 LuCI → OpenClash 确认一次）"
   fi
 
-  # --- ocspeed 自动测速：脚本是固件自带的，这里只补 3 条 cron ---
-  if [ -x /usr/libexec/openclash-helper/speedswitch.sh ] \
-     && ! grep -q speedswitch /etc/crontabs/root 2>/dev/null; then
-    cat >> /etc/crontabs/root <<'EOF'
-*/30 * * * * /usr/libexec/openclash-helper/speedswitch.sh run >>/var/log/ocspeed.log 2>&1
-* * * * * /usr/libexec/openclash-helper/speedswitch.sh failover >>/var/log/ocspeed.log 2>&1
-* * * * * /usr/libexec/openclash-helper/speedswitch.sh backup >>/var/log/ocspeed.log 2>&1
-EOF
-    ui_ok "ocspeed 自动测速 cron 已补"
-  fi
+  # --- ocspeed 的 cron 交给 kp-ocspeed.sh 调 speedswitch.sh enable 统一重建 ---
+  # 这里刻意**不再手工注入**：speedswitch.sh 的 cron_apply() 会按 UCI 里的
+  # enabled / failover_enable / backup_enable 决定写哪几条，而手工写死 3 条
+  # 会擅自打开用户已经关掉的功能（实测本机 failover_enable=0、backup_enable=0，
+  # crontab 里只有 1 条 run），也会和 enable 的重建逻辑打架。
+  # 本项目铁律：/etc/crontabs/root 只由 speedswitch.sh enable|disable 维护。
   /etc/init.d/cron enable 2>/dev/null || :
   /etc/init.d/cron restart 2>/dev/null || :
 
@@ -545,7 +545,9 @@ docker_smoke() {
   local m
   for m in $DOCKER_MIRRORS; do
     ui_info "当前镜像拉取失败，单独试加速镜像 $m ..."
-    uci -q delete dockerd.globals.registry_mirrors
+    # 兜底不能省：键不存在时 uci delete 返回非 0，这是**裸命令**（不在 && / || 列表里），
+    # set -e 下会直接结束脚本 —— 表现为"换个镜像试到一半就没了"。
+    uci -q delete dockerd.globals.registry_mirrors || :
     uci add_list dockerd.globals.registry_mirrors="$m"
     uci commit dockerd
     /etc/init.d/dockerd restart >/dev/null 2>&1 || :
@@ -586,7 +588,17 @@ stage_panel() {
     if [ "$(sha256sum "$PKG" | cut -d' ' -f1)" != "$SUM" ]; then
       rm -f "$PKG"; ui_fail "安装包 SHA256 校验不匹配" "损坏包已删除，重跑即可重下"
     fi
-    rm -rf "$BASE" "$DIR"; tar zxf "$PKG"; cd "$DIR"
+    # 数据目录只改名保留，**绝不用 rm -rf**：走到这个分支只说明「DB 或 1pctl
+    # 有一个没探测到」，并不代表 BASE 里没东西。实测 BASE 有 30.9M、其中
+    # db/1Panel.db 7MB（面板的全部状态）。1pctl 被手动删掉、DB 路径随版本变化、
+    # 上次装到一半就中断 …… 任一情况都会让这里被判为"未安装"，rm 下去就是
+    # 不可逆的数据丢失；改名保留的代价是 0。
+    if [ -d "$BASE" ] && [ -n "$(ls -A "$BASE" 2>/dev/null)" ]; then
+      KEEP="$BASE.bak-$(date +%s)"
+      mv "$BASE" "$KEEP" || ui_fail "旧数据目录改名失败" "手动 mv $BASE 后重跑"
+      ui_warn "检测到已有数据目录，已改名保留（未删除）：$KEEP"
+    fi
+    rm -rf "$DIR"; tar zxf "$PKG"; cd "$DIR"
     ui_ok "安装包已解压并通过 SHA256 校验"
 
     # 落文件。关键顺序：先写好 1pctl，再启动服务 ——
