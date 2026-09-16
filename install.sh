@@ -78,8 +78,11 @@ fetch() {
 # 把调用者传进来的参数透传给子脚本
 # （shell 变量默认不跨进程继承，必须显式 export，否则子脚本收不到）
 pass() {
+  # 注：曾经导出的 DOCKER_ENABLE_BRIDGE 已从这里删除 —— 内核没有 veth，容器只能
+  # 走 host 网络，kp-install.sh 里那段"切到网桥"的逻辑早已移除。留着它是个
+  # 没人读的假开关：用户设了它以为会生效，实际什么都不会发生。
   for v in FORCE SUB_URL SUB_NAME SUB_UA CORE_TYPE OC_VER PANEL_PORT PANEL_DIR \
-           PANEL_USER PANEL_PASS PANEL_ENT SKIP DOCKER_ENABLE_BRIDGE \
+           PANEL_USER PANEL_PASS PANEL_ENT SKIP \
            DISK OVERLAY_SIZE DATA_DIR NO_REBOOT \
            OCS_GROUP OCS_INTERVAL OCS_ENABLE OCS_RUN OCS_STORE \
            DOCKER_MIRRORS DOCKER_SMOKE APPS; do
