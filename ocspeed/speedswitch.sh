@@ -190,14 +190,21 @@ collect_all_nodes() {
   cut -f1 $DIR/nt.tsv > $DIR/names.txt
   : > $DIR/allnodes.txt
   TAB=$(printf '\t')
+  # 真实出站节点类型（小写，供上面循环归一后比对）
+  NODE_TYPES="vless vmess trojan hysteria hysteria2 tuic wireguard snell shadowsocks ss ssr socks5 http mieru ssh anytls shadowtls"
   while IFS="$TAB" read -r name alive type; do
     # 只收「真实出站节点」类型，策略组（Selector/URLTest/Fallback/LoadBalance/
     # Relay/Direct/Reject…）必须排除，否则会拿组名去测延迟。
     # 这份名单要跟着 mihomo 走：漏掉新协议 = 该类节点一个都进不了候选池，
     # 表现为"机场明明有 60 个节点，测速只认 44 个"，且日志里毫无线索。
-    case "$type" in
-      Vless|Vmess|Trojan|Hysteria|Hysteria2|TUIC|WireGuard|Snell|Shadowsocks|SS|SSR|Socks5|Http \
-      |AnyTLS|Mieru|SSH|Shadowtls) ;;
+    # mihomo 的 type 是 Go 常量，大小写拼法不统一、还随版本变过（Tuic / ShadowTLS /
+    # AnyTLS / Mieru / SSH…），而 ash 的 case 区分大小写 —— 写死一种拼法就整类漏光。
+    # 所以统一转小写再比：只会多命中，不会少命中。
+    # 已核对：策略组类型（Selector / URLTest / Fallback / LoadBalance / Relay / Direct /
+    # Reject / Compatible / Pass / Dns）小写后与下面任何一项都不重合，不会误收组名。
+    low=$(printf '%s' "$type" | tr 'A-Z' 'a-z') || low=""
+    case " $NODE_TYPES " in
+      *" $low "*) ;;
       *) continue ;;
     esac
     printf '%s\t%s\t%s\n' "$name" "$type" "$alive" >> $DIR/allnodes.txt
