@@ -269,6 +269,10 @@ build_nodes_json() {
   # 必须先写 .tmp 再 mv: 这个文件是几十次 printf 追加出来的, 而 run 跑着的时候
   # 页面会通过 status/nodes 子命令实时读它 —— 不加原子性就会读到半截文件,
   # 表现为页面偶发"当前节点"空白/报错, 刷新一下又好了, 极难复现。
+  # 2026-09-19 隔离副本实测(把输入放大到 4000 节点, 写窗口从几毫秒拉到秒级, 同进程内密集读):
+  #   直写 > 和 >>: 合法读 5~10 次 / 撕裂读 3413~4351 次
+  #   tmp+mv     : 合法读 24132~26034 次 / 撕裂读 0 次
+  # 线上只有 72 节点、写窗口几毫秒, 撞上的概率低, 但代价只是一次 mv。
   # sites.json 早就是 tmp+mv, 这里补齐。
   local NJ=$DATA/nodes.json.tmp
   printf '{"ts":%s,"total":%s,"nodes":[' "$(date +%s)" "$n_all" > $NJ
@@ -519,6 +523,7 @@ speedtest_full() {
 
   # 状态 JSON: top 按初赛排名输出, d=初赛延迟(排名依据), f=决赛延迟(null=未过闸门)
   # 同样 tmp+mv: 页面读的就是这个文件, 半截 JSON 会让 jsonfilter 直接报错。
+  # （撕裂读实测数据见 build_nodes_json 的注释）
   local SJ=$DATA/status.json.tmp
   printf '{"ts":%s,"group":"%s","now":"%s","switched":%s,"candidates":%s,"top":[' "$(date +%s)" "$(json_esc "$group")" "$(json_esc "$best")" "$switched" "$n_cand" > $SJ
   i=0
