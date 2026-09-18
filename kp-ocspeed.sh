@@ -84,14 +84,26 @@ else
 fi
 
 fetch_oc() {
-  # 已由 install.sh 下好的直接复用，省一次网络往返
-  if [ -s "$OC/$1" ]; then return 0; fi
+  # ⚠️ 这里原先是「$OC/$1 已存在就 return 0」，直接复用第一次下载的那份。
+  #    实测后果：$OC 在 /tmp/kp-nros/ocspeed（tmpfs，开机内一直保留），
+  #    所以同一次开机里第二次跑一键链 —— 包括用户 overlay 重建后"重跑恢复"
+  #    这种最典型的场景 —— 装的全是旧版，仓库里修好的 bug 永远上不了机，
+  #    而脚本照样打印「✓ 文件已就位」，看不出来。
+  #    正确做法：每次都下到 .new，成功才 mv 覆盖；只有网络全挂时才退回缓存，
+  #    并且要把"用的是旧版"说出来。
   mkdir -p "$OC"
+  local tmp="$OC/$1.new"
+  rm -f "$tmp" 2>/dev/null || :
   for base in "$RAW" "https://ghfast.top/$RAW" "https://gh-proxy.com/$RAW"; do
-    if get "$base/ocspeed/$1" "$OC/$1" 2>/dev/null && [ -s "$OC/$1" ]; then
-      return 0
+    if get "$base/ocspeed/$1" "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+      mv -f "$tmp" "$OC/$1" && return 0
     fi
   done
+  rm -f "$tmp" 2>/dev/null || :
+  if [ -s "$OC/$1" ]; then
+    echo "  ! ocspeed/$1 下载失败，沿用本机缓存的旧版（恢复网络后重跑可更新）"
+    return 0
+  fi
   echo "  ✗ ocspeed/$1 下载失败" >&2
   return 1
 }
