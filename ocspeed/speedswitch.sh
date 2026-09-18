@@ -266,7 +266,12 @@ lock_acquire() {
 build_nodes_json() {
   local n_all=$(wc -l < $DIR/allnodes.txt)
   local TAB=$(printf '\t')
-  printf '{"ts":%s,"total":%s,"nodes":[' "$(date +%s)" "$n_all" > $DATA/nodes.json
+  # 必须先写 .tmp 再 mv: 这个文件是几十次 printf 追加出来的, 而 run 跑着的时候
+  # 页面会通过 status/nodes 子命令实时读它 —— 不加原子性就会读到半截文件,
+  # 表现为页面偶发"当前节点"空白/报错, 刷新一下又好了, 极难复现。
+  # sites.json 早就是 tmp+mv, 这里补齐。
+  local NJ=$DATA/nodes.json.tmp
+  printf '{"ts":%s,"total":%s,"nodes":[' "$(date +%s)" "$n_all" > $NJ
   local first=1
   while IFS="$TAB" read -r name type alive; do
     local d s
@@ -274,17 +279,18 @@ build_nodes_json() {
     if is_fake "$name"; then s="fake"
     elif [ -n "$d" ]; then s="ok"
     else s="dead"; fi
-    [ $first -eq 0 ] && printf ',' >> $DATA/nodes.json
+    [ $first -eq 0 ] && printf ',' >> $NJ
     first=0
     if [ -n "$d" ]; then
       printf '{"n":"%s","t":"%s","a":%s,"d":%s,"s":"%s"}' \
-        "$(json_esc "$name")" "$(json_esc "$type")" "$alive" "$d" "$s" >> $DATA/nodes.json
+        "$(json_esc "$name")" "$(json_esc "$type")" "$alive" "$d" "$s" >> $NJ
     else
       printf '{"n":"%s","t":"%s","a":%s,"d":null,"s":"%s"}' \
-        "$(json_esc "$name")" "$(json_esc "$type")" "$alive" "$s" >> $DATA/nodes.json
+        "$(json_esc "$name")" "$(json_esc "$type")" "$alive" "$s" >> $NJ
     fi
   done < $DIR/allnodes.txt
-  printf ']}' >> $DATA/nodes.json
+  printf ']}' >> $NJ
+  mv $NJ $DATA/nodes.json
 }
 
 # 站点 → 「分类 + 显示名」。分类只影响展示（视频/流媒体/AI 分组带），不参与任何判定。
@@ -512,20 +518,23 @@ speedtest_full() {
   set_progress "switch" "计算最快节点并切换" 90
 
   # 状态 JSON: top 按初赛排名输出, d=初赛延迟(排名依据), f=决赛延迟(null=未过闸门)
-  printf '{"ts":%s,"group":"%s","now":"%s","switched":%s,"candidates":%s,"top":[' "$(date +%s)" "$(json_esc "$group")" "$(json_esc "$best")" "$switched" "$n_cand" > $DATA/status.json
+  # 同样 tmp+mv: 页面读的就是这个文件, 半截 JSON 会让 jsonfilter 直接报错。
+  local SJ=$DATA/status.json.tmp
+  printf '{"ts":%s,"group":"%s","now":"%s","switched":%s,"candidates":%s,"top":[' "$(date +%s)" "$(json_esc "$group")" "$(json_esc "$best")" "$switched" "$n_cand" > $SJ
   i=0
   while IFS="$TAB" read -r d nm; do
     [ -z "$nm" ] && continue
     fd=$(awk -F '\t' -v n="$nm" '$2==n{print $1; exit}' $DIR/stage2.txt 2>/dev/null)
-    [ $i -gt 0 ] && printf ',' >> $DATA/status.json
+    [ $i -gt 0 ] && printf ',' >> $SJ
     if [ -n "$fd" ]; then
-      printf '{"d":%s,"f":%s,"n":"%s"}' "$d" "$fd" "$(json_esc "$nm")" >> $DATA/status.json
+      printf '{"d":%s,"f":%s,"n":"%s"}' "$d" "$fd" "$(json_esc "$nm")" >> $SJ
     else
-      printf '{"d":%s,"f":null,"n":"%s"}' "$d" "$(json_esc "$nm")" >> $DATA/status.json
+      printf '{"d":%s,"f":null,"n":"%s"}' "$d" "$(json_esc "$nm")" >> $SJ
     fi
     i=$((i+1))
   done < $DIR/top5d.txt
-  printf ']}' >> $DATA/status.json
+  printf ']}' >> $SJ
+  mv $SJ $DATA/status.json
 
   top5line=$(cut -f2 $DIR/top5d.txt | tr '\n' ' ')
   okn=$(grep -o '"s":"ok"' $DATA/nodes.json | wc -l)
