@@ -1821,6 +1821,65 @@
   .ocspeed-body table.sites thead tr.catrow th.cbth { letter-spacing: 0.06em; font-size: 10px; }
 }
 
+
+/* ==========================================================================
+   v1.0 · Apple Pro 覆写层 —— 纯黑舞台 / SF Pro / 18px 大圆角 / 胶囊按钮
+   只覆写不删除：下层 Linear 规则全部保留，任何遗漏选择器都有兜底
+   ========================================================================== */
+.ocspeed-body{
+  --bg-canvas:#000000; --bg-solid:#161617;
+  --bg-card:#1c1c1e; --bg-subtle:#1c1c1e;
+  --bg-muted:rgba(255,255,255,0.06); --bg-hover:rgba(255,255,255,0.09);
+  --bg-inset:#0b0b0c;
+  --border-light:rgba(255,255,255,0.08); --border-subtle:rgba(255,255,255,0.05); --border-strong:rgba(255,255,255,0.14);
+  --border-focus:#2997ff;
+  --text-main:#f5f5f7; --text-body:#d6d6d9; --text-muted:#86868b; --text-sub:#6e6e73;
+  --brand-primary:#2997ff; --brand-hover:#5aa9ff; --brand-active:#0a84ff;
+  --brand-light:rgba(41,151,255,0.14); --brand-ring:rgba(41,151,255,0.30); --on-brand:#06283d;
+  --status-ok:#30d158; --status-ok-bg:rgba(48,213,88,0.12); --status-ok-border:rgba(48,213,88,0.30);
+  --status-warn:#ff9f0a; --status-warn-bg:rgba(255,159,10,0.12); --status-warn-border:rgba(255,159,10,0.30);
+  --status-bad:#ff453a; --status-bad-bg:rgba(255,69,58,0.12); --status-bad-border:rgba(255,69,58,0.30);
+  --radius-sm:7px; --radius-md:12px; --radius-lg:18px;
+  --font-ui:"SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+}
+.ocspeed-body{background:#000;font-feature-settings:normal;padding:24px 24px 56px}
+.ocspeed-body h1{font-size:28px;font-weight:700;letter-spacing:-0.02em}
+.ocspeed-body .ver{background:var(--brand-light);border:1px solid transparent;color:var(--brand-primary)}
+.ocspeed-body .live{background:var(--bg-card)}
+.ocspeed-body .pill{background:var(--bg-card)}
+.ocspeed-body .card{background:var(--bg-card);border:1px solid transparent;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);transition:background .18s,transform .18s}
+.ocspeed-body .card:hover{background:#232327;transform:translateY(-2px)}
+.ocspeed-body .card .big{font-size:38px;font-weight:700;letter-spacing:-0.02em}
+.ocspeed-body .card.p0{position:relative;overflow:hidden}
+.ocspeed-body .card.p0::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--brand-primary),transparent);box-shadow:0 0 14px rgba(41,151,255,.45)}
+.ocspeed-body .panel{background:var(--bg-card);border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
+.ocspeed-body .ph b{font-size:17px;font-weight:600;letter-spacing:-0.01em;color:var(--text-main)}
+.ocspeed-body button{font-family:var(--font-ui);border-radius:980px}
+.ocspeed-body button.primary{background:#0071e3;border:1px solid transparent;box-shadow:none}
+.ocspeed-body button.primary:hover{background:#1482ee}
+.ocspeed-body button.mini{border-radius:980px}
+.ocspeed-body .fbtn{border-radius:980px}
+.ocspeed-body .tw{border-radius:12px}
+.ocspeed-body .tw table{background:transparent}
+.ocspeed-body .tw thead th{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)}
+.ocspeed-body .tw tbody tr{transition:background .15s}
+.ocspeed-body .tw tbody tr:hover{background:rgba(255,255,255,0.04)}
+.ocspeed-body .searchbox input{background:var(--bg-inset);border-radius:980px;border:1px solid var(--border-light)}
+.ocspeed-body .searchbox input:focus{border-color:var(--brand-primary);box-shadow:0 0 0 3px var(--brand-ring)}
+.ocspeed-body .pb{background:var(--bg-card);border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
+.ocspeed-body .pb-fill{background:linear-gradient(90deg,#0071e3,#2997ff 60%,#64d2ff)}
+.ocspeed-body .pb.done .pb-fill{background:var(--status-ok)}
+.ocspeed-body .pb-stages{display:flex;flex-wrap:wrap;gap:8px}
+.ocspeed-body .pb-stages .st{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;border-radius:980px;border:1px solid var(--border-light);font-size:12px;font-weight:500;color:var(--text-sub);background:transparent;flex:none}
+.ocspeed-body .pb-stages .st::before,.ocspeed-body .pb-stages .st::after{display:none}
+.ocspeed-body .pb-stages .st.done{color:var(--status-ok);border-color:var(--status-ok-border);background:var(--status-ok-bg)}
+.ocspeed-body .pb-stages .st.active{color:var(--brand-primary);border-color:var(--brand-ring);background:var(--brand-light);font-weight:600}
+.ocspeed-body .banner{border-radius:var(--radius-md)}
+.ocspeed-body .bk-item{border-radius:14px}
+.ocspeed-body details.cfg{background:var(--bg-card);border-radius:18px}
+.ocspeed-body #logbox{background:var(--bg-inset);border-radius:12px}
+.ocspeed-body button:focus-visible,.ocspeed-body a:focus-visible,.ocspeed-body summary:focus-visible,.ocspeed-body input:focus-visible{outline:2px solid var(--brand-primary);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){.ocspeed-body *,.ocspeed-body *::before,.ocspeed-body *::after{animation-duration:.001ms !important;transition-duration:.001ms !important}}
 </style>
 
 <div id="err" style="display:none;background:var(--status-bad-bg);border:1px solid var(--status-bad-border);color:var(--status-bad);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:14px;font-size:13px"></div>
@@ -1831,7 +1890,7 @@
       <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
       <circle cx="12" cy="12" r="4"/>
     </svg>
-    <h1>OpenClash 自动测速切换<span class="ver" title="页面部署时间；若刷新后时间不变，说明浏览器用了缓存">v2 · <%=ver%></span></h1>
+    <h1>OpenClash 自动测速切换<span class="ver" title="页面部署时间；若刷新后时间不变，说明浏览器用了缓存">v1.0 · <%=ver%></span></h1>
   </div>
   
   <span class="live"><span class="ld"></span><span id="liveLabel">实时</span></span>
@@ -1862,7 +1921,7 @@
   </div>
   <div class="pb-track"><div id="pbarFill" class="pb-fill"></div><i id="pbarKnob"></i></div>
   <div class="pb-stages" id="pbarStages">
-    <span class="st">收集</span><span class="st">全量测速</span><span class="st">分类测速</span><span class="st">切换</span><span class="st">完成</span>
+    <span class="st">收集</span><span class="st">全量测速</span><span class="st">Gemini 准入</span><span class="st">分类测速</span><span class="st">切换</span><span class="st">完成</span>
   </div>
 </div>
 
@@ -1901,7 +1960,7 @@
 
 <section class="panel">
   <div class="ph">
-    <b>节点排行（初赛排名 · 决赛仅作可用性筛选）</b>
+    <b>节点排行（初赛排名 · Gemini 准入闸门）</b>
     <button id="btnTest">仅测速</button>
     <button id="btnRun" class="primary">测速并切换</button>
   </div>
@@ -2263,12 +2322,12 @@ var progTimer = null;
 var runStarting = false;
 var lastRunSwitch = 1;
 var sawLive = false;
-var STAGE_OF = {start:0, collect:0, testing:1, nodes:1, sites:2, switch:3, done:4};
+var STAGE_OF = {start:0, collect:0, testing:1, nodes:2, sites:3, switch:4, done:5};
 var settling = false;
 var settleTimer = null;
 var pctSince = 0;
 var PHASE_HINT = {start:'启动', collect:'收集节点', testing:'逐个测速',
-                  nodes:'汇总结果', sites:'测分类站点', switch:'切换节点', done:'完成'};
+                  nodes:'Gemini 准入探测', sites:'测分类站点', switch:'切换节点', done:'完成'};
 var STALL_AFTER = 8;
 var lastMsg = '', lastPhase = '';
 

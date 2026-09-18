@@ -340,13 +340,13 @@ local function build_parts(filt)
 	local g = ug:get("ocspeed", "main", "group")
 	if g and g ~= "" then group = g end
 	-- 控制端口与密钥必须和 speedswitch.sh 取同一处 UCI（openclash.config.cn_port /
-	-- dashboard_password）。写死 9090 + 7LHZ3l74 时，用户只要在 LuCI 里改过
+	-- dashboard_password）。写死 9090 + 固定密钥时，用户只要在 LuCI 里改过
 	-- dashboard_password，这条查询就永远 401；而下面第 354 行有 `cur == ""` 兜底，
 	-- 页面会静默退化成显示 status.json 里的旧值 —— 看起来"能用"，其实是陈的。
 	local ocport = ug:get("openclash", "config", "cn_port") or ""
 	if ocport == "" then ocport = "9090" end
 	local ocsec = ug:get("openclash", "config", "dashboard_password") or ""
-	if ocsec == "" then ocsec = "7LHZ3l74" end
+	-- 未设置时留空：按无密钥访问 mihomo（切勿写死真实密钥）
 	-- 密钥/端口来自用户输入，会拼进 shell 单引号串：先剔掉会截断命令的字符
 	ocsec = ocsec:gsub("'", "")
 	ocport = ocport:gsub("[^0-9]", "")

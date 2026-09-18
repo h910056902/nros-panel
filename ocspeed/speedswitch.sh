@@ -23,7 +23,7 @@
 _OC_PORT=$(uci -q get openclash.config.cn_port 2>/dev/null)
 [ -z "$_OC_PORT" ] && _OC_PORT=9090
 _OC_SECRET=$(uci -q get openclash.config.dashboard_password 2>/dev/null)
-[ -z "$_OC_SECRET" ] && _OC_SECRET=7LHZ3l74
+# 未设置 dashboard_password 时按无密钥访问；切勿把真实密钥写死进仓库
 API=http://127.0.0.1:$_OC_PORT
 SECRET=$_OC_SECRET
 DIR=/tmp/ocspeed
@@ -453,11 +453,16 @@ speedtest_full() {
   # 决赛目标是 gemini.google.com, 国内不可达、必须走代理, 抖动可达 2.3 倍
   # (实测同节点两轮 908ms / 2108ms), 而切换阈值只有 50ms —— 拿它排名等于掷骰子。
   # 后果: 历史 8 次切换里 4 次是劣化, 152ms 的节点被 656ms 的顶掉, 半小时后又切回来。
-  head -5 $DIR/stage1.txt > $DIR/top5d.txt            # d \t name, 已按初赛升序
+  cp $DIR/stage1.txt $DIR/top5d.txt                   # v1.0: 闸门扩到全部候选(仍按初赛升序)
   cut -f2 $DIR/top5d.txt > $DIR/top5.txt
   : > $DIR/stage2.txt
+  local gtotal=$(wc -l < $DIR/top5.txt 2>/dev/null)
+  [ -z "$gtotal" ] && gtotal=1
+  local gi=0
   while read -r name; do
     [ -z "$name" ] && continue
+    gi=$((gi+1))
+    set_progress "nodes" "Gemini 准入探测 ($gi/$gtotal)" $((60 + gi*10/gtotal))
     d=$(node_delay "$name" "$gemini_url" 6000)
     # 失败重试一次: 抖动是常态, 重试能滤掉大部分假阴性, 且只有失败时才多花时间
     [ -z "$d" ] && d=$(node_delay "$name" "$gemini_url" 6000)
@@ -541,7 +546,7 @@ speedtest_full() {
   printf ']}' >> $SJ
   mv $SJ $DATA/status.json
 
-  top5line=$(cut -f2 $DIR/top5d.txt | tr '\n' ' ')
+  top5line=$(head -5 $DIR/top5d.txt | cut -f2 | tr '\n' ' ')   # 历史行只记 Top5
   okn=$(grep -o '"s":"ok"' $DATA/nodes.json | wc -l)
   deadn=$(grep -o '"s":"dead"' $DATA/nodes.json | wc -l)
   faken=$(grep -o '"s":"fake"' $DATA/nodes.json | wc -l)
